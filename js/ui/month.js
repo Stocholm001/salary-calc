@@ -398,18 +398,28 @@ export async function renderMonth(root, app, key) {
 
   /** @returns true ถ้าลบแล้ว, false ถ้าผู้ใช้ยกเลิก */
   async function handleDelete(orig) {
+    const monthText = monthLabel(year, month);
+    // รายการประจำ: ถามก่อนว่าลบแบบไหน
+    let scope = 'this';
     if (orig.templateId) {
-      const scope = await choose({
+      scope = await choose({
         title: t('del.title', { name: orig.name }),
-        message: t('del.msg'),
+        message: t('del.msg', { month: monthText }),
         options: [
           { label: t('del.this'), value: 'this', tone: 'plain' },
           { label: t('del.stop'), value: 'stop', tone: 'danger' },
         ],
       });
       if (!scope) return false;
-      if (scope === 'stop') await stopRecurring(store, orig.templateId, addMonths(key, -1));
     }
+    // ยืนยันอีกครั้งก่อนลบจริง (ทุกรายการ)
+    const ok = await choose({
+      title: t('del.confirmTitle', { name: orig.name }),
+      message: t(scope === 'stop' ? 'del.confirmStop' : 'del.confirmOnce', { month: monthText }),
+      options: [{ label: t('del.confirmBtn'), value: 'yes', tone: 'danger' }],
+    });
+    if (!ok) return false;
+    if (scope === 'stop') await stopRecurring(store, orig.templateId, addMonths(key, -1));
     m.items = m.items.filter((it) => it !== orig);
     return true;
   }

@@ -18,6 +18,8 @@ import { renderMonth } from './ui/month.js';
 import { renderYear } from './ui/year.js';
 import { renderSettings } from './ui/settings.js';
 import { initPwa } from './pwa.js';
+import { createAppLock } from './ui/lock-screen.js';
+import { greetName } from './profile.js';
 
 // โค้ดแอปโหลดครบแล้ว (index.html ใช้ตัดสินว่าจะแสดงหน้า "โหลดไม่สำเร็จ" หรือไม่)
 window.__appStarted = true;
@@ -142,13 +144,29 @@ async function route() {
 
 let started = false;
 
-/** เริ่มส่วนแอปหลังรู้แล้วว่าใช้ store ไหน */
-async function startApp(store) {
+/**
+ * เริ่มส่วนแอปหลังรู้แล้วว่าใช้ store ไหน
+ * @param opts.uid       มีเมื่อใช้ Firebase → เปิดระบบล็อกด้วย PIN เมื่อไม่ได้ใช้งาน 5 นาที
+ * @param opts.restored  true = เปิดแอปด้วย session เดิม (ไม่ได้เพิ่งกรอก PIN) → ล็อกก่อนถ้าไม่ได้ใช้นานพอ
+ */
+async function startApp(store, { uid = null, restored = false } = {}) {
   app.store = store;
   app.settings = await store.getSettings();
   app.profile = await store.getProfile();
   app.hidden = !!app.settings.hideOnOpen;
   loadLastMonth();
+  if (uid) {
+    const lock = createAppLock({
+      uid,
+      username: app.profile.username,
+      name: greetName(app.profile),
+      onLogout: () => app.logout(),
+    });
+    // ล็อกก่อนวาดหน้าแรก ข้อมูลจะได้ไม่โผล่ให้เห็นก่อนใส่ PIN
+    if (restored && lock.needsLock()) await lock.lock();
+    else lock.markActive();
+    lock.start();
+  }
   if (!started) {
     started = true;
     window.addEventListener('hashchange', route);
@@ -197,17 +215,18 @@ async function start() {
     return;
   }
 
-  const enter = async () => {
+  const enter = async (restored) => {
+    const uid = fb.auth.currentUser.uid;
     try {
-      await startApp(createFirestoreStore(fb, fb.auth.currentUser.uid));
+      await startApp(createFirestoreStore(fb, uid), { uid, restored });
     } catch (err) {
       console.error(err);
       showFatal(t('fatal.data'));
     }
   };
 
-  if (user) await enter();
-  else renderLogin($('#app'), { onSignedIn: enter });
+  if (user) await enter(true);
+  else renderLogin($('#app'), { onSignedIn: () => enter(false) });
 }
 
 start();
