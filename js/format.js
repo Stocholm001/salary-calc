@@ -2,6 +2,7 @@
 // รับ/คืนค่าเป็นสตางค์และ basis points (integer) เสมอ ไม่แปลงผ่าน float
 
 import { monthLabel, weekdaysLabel, DEFAULT_WEEKDAYS } from './dates.js';
+import { t } from './i18n.js';
 
 export const MINUS = '−'; // −
 export const HIDDEN = '••••••';
@@ -81,14 +82,14 @@ export const parseMoney = parseFixed2;
 /** "3.25" → 325 (bp), ไม่ถูกต้อง/ทศนิยมเกิน 2 ตำแหน่ง → null */
 export const parsePercent = parseFixed2;
 
-// ---------- ข้อความอธิบายรายการ ----------
+// ---------- ข้อความอธิบายรายการ (ตามภาษาปัจจุบัน) ----------
 
-const BASE_LABEL = { salary: 'ของเงินเดือน', gross: 'ของรายรับรวม' };
+const baseLabel = (base) => t(base === 'gross' ? 'fmt.ofGross' : 'fmt.ofSalary');
 
 /** ป้ายวิธีคิด: "ต่อวัน" / "%" / "คงที่" */
 export function methodBadge(item) {
-  if (item.method === 'daily') return 'ต่อวัน';
-  return item.anchor === 'percent' ? '%' : 'คงที่';
+  if (item.method === 'daily') return t('badge.daily');
+  return item.anchor === 'percent' ? '%' : t('badge.fixed');
 }
 
 /**
@@ -102,16 +103,13 @@ export function describeItem(item, result) {
   if (item.method === 'daily') {
     const wd = weekdaysLabel(item.weekdays ?? DEFAULT_WEEKDAYS);
     const days = result.offDays > 0
-      ? `${wd} ${result.countedDays} ${MINUS} หยุด ${result.offDays}`
+      ? t('fmt.dailyOff', { wd, count: result.countedDays, off: result.offDays }).replace('−', MINUS)
       : `${wd} ${result.countedDays}`;
-    return `${formatMoneyCompact(item.rateSatang ?? 0)} × ${result.effectiveDays} วัน (${days})`;
+    return t('fmt.daily', { rate: formatMoneyCompact(item.rateSatang ?? 0), n: result.effectiveDays, days });
   }
-  if (item.anchor === 'percent') {
-    let s = `${formatPctCompact(item.bp ?? 0)} ${BASE_LABEL[result.base]}`;
-    if (result.capped) s += ` (สูงสุด ${formatMoney(item.capSatang)})`;
-    return s;
-  }
-  return result.capped ? `จำนวนเงินคงที่ (สูงสุด ${formatMoney(item.capSatang)})` : 'จำนวนเงินคงที่';
+  const cap = result.capped ? ` (${t('fmt.max', { cap: formatMoney(item.capSatang) })})` : '';
+  if (item.anchor === 'percent') return `${formatPctCompact(item.bp ?? 0)} ${baseLabel(result.base)}${cap}`;
+  return t('fmt.fixed') + cap;
 }
 
 /**
@@ -122,22 +120,20 @@ export function describeItem(item, result) {
  */
 export function dailySummaryLines(item, result, year, month) {
   const wd = weekdaysLabel(item.weekdays ?? DEFAULT_WEEKDAYS);
-  const days = result.offDays > 0
-    ? `${wd} ${result.countedDays} วัน ${MINUS} หยุด ${result.offDays} = ${result.effectiveDays} วัน`
-    : `${wd} ${result.countedDays} วัน`;
+  const p = { month: monthLabel(year, month), wd, count: result.countedDays, off: result.offDays, eff: result.effectiveDays };
   return [
-    `${monthLabel(year, month)} · ${days}`,
-    `${formatMoneyCompact(item.rateSatang ?? 0)} × ${result.effectiveDays} = ${formatMoney(result.amountSatang)} บาท`,
-    `= ${formatPct(result.pctOfSalaryBp)} ของเงินเดือน`,
+    (result.offDays > 0 ? t('fmt.sum1Off', p) : t('fmt.sum1', p)).replace('−', MINUS),
+    t('fmt.sum2', { rate: formatMoneyCompact(item.rateSatang ?? 0), n: result.effectiveDays, amount: formatMoney(result.amountSatang) }),
+    t('fmt.sum3', { pct: formatPct(result.pctOfSalaryBp) }),
   ];
 }
 
 /** ข้อความ "x.xx% ของเงินเดือน" ใต้ยอดเงินในการ์ด */
 export function pctOfSalaryText(bp) {
-  return `${formatPct(bp)} ของเงินเดือน`;
+  return t('fmt.pctOfSalary', { pct: formatPct(bp) });
 }
 
 /** ข้อความเตือนตอนยอดสุทธิติดลบ */
 export function negativeNetMessage(netSatang) {
-  return `เดือนนี้รายหักมากกว่ารายรับ ${formatMoney(Math.abs(netSatang))} บาท`;
+  return t('fmt.negative', { amount: formatMoney(Math.abs(netSatang)) });
 }

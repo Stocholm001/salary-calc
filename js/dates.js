@@ -1,6 +1,9 @@
 // dates.js — ชื่อเดือนไทย, แปลง พ.ศ./ค.ศ., นับวัน
 // ปีในโค้ดเป็น ค.ศ. เสมอ แปลงเป็น พ.ศ. เฉพาะตอนแสดงผล
 // month เป็น 1–12, weekday เป็น ISO (1 = จันทร์ … 7 = อาทิตย์)
+// ชื่อที่แสดงผลตามภาษาปัจจุบันใน i18n.js (ไทยใช้ พ.ศ., อังกฤษใช้ ค.ศ.)
+
+import { getLang } from './i18n.js';
 
 export const THAI_MONTHS = [
   'มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
@@ -14,6 +17,25 @@ export const THAI_MONTHS_SHORT = [
 
 // index = ISO weekday (index 0 ไม่ใช้)
 export const THAI_WEEKDAYS_SHORT = ['', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส', 'อา'];
+
+export const EN_MONTHS = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+export const EN_MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+export const EN_WEEKDAYS_SHORT = ['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const THAI_WEEKDAYS_FULL = ['', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์', 'อาทิตย์'];
+const EN_WEEKDAYS_FULL = ['', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+const isEn = () => getLang() === 'en';
+export const monthName = (m) => (isEn() ? EN_MONTHS : THAI_MONTHS)[m - 1];
+export const monthShort = (m) => (isEn() ? EN_MONTHS_SHORT : THAI_MONTHS_SHORT)[m - 1];
+export const weekdayShort = (w) => (isEn() ? EN_WEEKDAYS_SHORT : THAI_WEEKDAYS_SHORT)[w];
+export const weekdayFull = (w) => (isEn() ? EN_WEEKDAYS_FULL : THAI_WEEKDAYS_FULL)[w];
+/** ปีสำหรับแสดงผล: ไทย "พ.ศ. 2569", อังกฤษ "2026" */
+export const yearLabel = (ceYear) => (isEn() ? String(ceYear) : `พ.ศ. ${ceYear + 543}`);
+/** ปีแบบตัวเลขอย่างเดียว: ไทย 2569, อังกฤษ 2026 */
+export const yearNumber = (ceYear) => (isEn() ? ceYear : ceYear + 543);
 
 export const DEFAULT_WEEKDAYS = Object.freeze([1, 2, 3, 4, 5]);
 
@@ -48,19 +70,20 @@ export function normalizeWeekdays(weekdays) {
     .sort((a, b) => a - b);
 }
 
-/** ข้อความย่อชุดวัน: จ–ศ / ทุกวัน / ส–อา / จ พ ศ */
+/** ข้อความย่อชุดวัน: จ–ศ / ทุกวัน / ส–อา / จ พ ศ (อังกฤษ: Mon–Fri / Every day / Sat–Sun / Mon Wed Fri) */
 export function weekdaysLabel(weekdays) {
   const w = normalizeWeekdays(weekdays);
   const key = w.join(',');
-  if (key === '1,2,3,4,5,6,7') return 'ทุกวัน';
-  if (key === '1,2,3,4,5') return 'จ–ศ';
-  if (key === '6,7') return 'ส–อา';
-  return w.map((d) => THAI_WEEKDAYS_SHORT[d]).join(' ');
+  const en = isEn();
+  if (key === '1,2,3,4,5,6,7') return en ? 'Every day' : 'ทุกวัน';
+  if (key === '1,2,3,4,5') return en ? 'Mon–Fri' : 'จ–ศ';
+  if (key === '6,7') return en ? 'Sat–Sun' : 'ส–อา';
+  return w.map(weekdayShort).join(' ');
 }
 
-/** "พฤศจิกายน 2569" */
+/** "พฤศจิกายน 2569" / "November 2026" */
 export function monthLabel(year, month) {
-  return `${THAI_MONTHS[month - 1]} ${toBE(year)}`;
+  return `${monthName(month)} ${yearNumber(year)}`;
 }
 
 /** คีย์เอกสารเดือน "YYYY-MM" (ค.ศ.) */
