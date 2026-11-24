@@ -1,0 +1,10 @@
+{
+  "name": "กระปุกเงินเดือน",
+  "short_name": "กระปุกเงินเดือน",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "theme_color": "#FFE89A",
+  "background_color": "#FFF8DC",
+  "icons": []
+}
