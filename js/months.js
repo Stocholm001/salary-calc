@@ -73,14 +73,23 @@ export async function loadMonth(store, key) {
   };
 }
 
+/** id ของ template ที่ใช้งานอยู่ในเดือน key */
+export async function activeTemplateIds(store, key) {
+  return new Set((await store.listTemplates()).filter((t) => isTemplateActive(t, key)).map((t) => t.id));
+}
+
 /**
  * คัดลอกจากเดือนก่อน (pure)
  * mode "replace" = แทนที่ทั้งหมด, "append" = เพิ่มต่อท้าย (ข้ามรายการประจำที่มีอยู่แล้ว)
+ * activeTplIds: Set ของ template ที่ใช้งานในเดือนปลายทาง (จาก activeTemplateIds)
+ *   รายการประจำที่ template ไม่ใช้งานแล้วในเดือนนี้ (หมดอายุ/ถูกลบ) จะกลายเป็นรายการธรรมดา (templateId = null)
+ *   ไม่ส่งมา = คง templateId ไว้ตามเดิม
  */
-export function copyFromPrevious(current, prevDoc, mode = 'replace') {
+export function copyFromPrevious(current, prevDoc, mode = 'replace', activeTplIds = null) {
   const copied = (prevDoc.items ?? []).map((it) => {
     const c = { ...clone(it), id: newId('itm') };
     if (c.method === 'daily') c.offDays = 0;
+    if (activeTplIds && c.templateId && !activeTplIds.has(c.templateId)) c.templateId = null;
     delete c.paid; // เดือนใหม่ยังไม่ได้ชำระ
     return c;
   });
@@ -155,14 +164,16 @@ export async function updateRecurring(store, key, item, endMonth) {
 
 /**
  * หยุดรายการประจำ: ตั้ง endMonth = lastMonth แล้วเอาออกจากเดือนที่บันทึกแล้วหลัง lastMonth
+ * ถ้า endMonth เดิมสิ้นสุดก่อน lastMonth อยู่แล้ว ให้คงค่าเดิม (หยุดต้องไม่ทำให้ใช้งานยาวขึ้น)
  * ถ้า endMonth < startMonth (ไม่เหลือเดือนที่ใช้) ให้ลบ template ทิ้ง
  */
 export async function stopRecurring(store, templateId, lastMonth) {
   const templates = await store.listTemplates();
   const tpl = templates.find((t) => t.id === templateId);
   if (tpl) {
-    if (lastMonth < tpl.startMonth) await store.deleteTemplate(tpl.id);
-    else await store.saveTemplate({ ...tpl, endMonth: lastMonth });
+    const end = tpl.endMonth != null && tpl.endMonth < lastMonth ? tpl.endMonth : lastMonth;
+    if (end < tpl.startMonth) await store.deleteTemplate(tpl.id);
+    else if (end !== tpl.endMonth) await store.saveTemplate({ ...tpl, endMonth: end });
   }
   for (const k of await savedMonthsAfter(store, lastMonth)) {
     const doc = await store.getMonth(k);

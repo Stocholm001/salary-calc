@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { createLocalStore, createMemoryStorage } from '../js/store/local.js';
 import {
   loadMonth, findPrevSaved, copyFromPrevious, enableRecurring, updateRecurring,
-  stopRecurring, isTemplateActive, summarizeYear, loadYear, firstDataYear,
+  stopRecurring, isTemplateActive, summarizeYear, loadYear, firstDataYear, activeTemplateIds,
 } from '../js/months.js';
 
 const fresh = () => createLocalStore(createMemoryStorage(), 'test');
@@ -232,13 +232,25 @@ test('updateRecurring: เดือนในช่วงเดิมที่ผ
   assert.equal((await s.getMonth('2026-03')).items[0].amountSatang, 130000);
 });
 
-test('copyFromPrevious: template ที่หมดอายุแล้ว (พฤติกรรมปัจจุบัน: templateId ติดมาด้วย)', async () => {
-  // ⚪ ในรีวิว ยังไม่ได้ตัดสินว่าควรตัด templateId ทิ้งหรือไม่ ถ้าเปลี่ยนพฤติกรรมให้แก้เทสต์นี้
-  const prev = { salarySatang: 3000000, items: [tax({ templateId: 'tpl_ended', paid: true })] };
-  const next = copyFromPrevious({ salarySatang: 0, items: [] }, prev, 'replace');
-  assert.equal(next.items[0].templateId, 'tpl_ended');
+test('copyFromPrevious: template ที่ไม่ใช้งานในเดือนปลายทางแล้ว → กลายเป็นรายการธรรมดา', async () => {
+  const s = fresh();
+  const ended = await enableRecurring(s, '2026-01', tax({ id: 'e' }), '2026-02');
+  const live = await enableRecurring(s, '2026-01', park({ id: 'l' }), null);
+  const prev = { salarySatang: 3000000, items: [{ ...ended, paid: true }, live, tax({ id: 'gone', templateId: 'tpl_deleted' })] };
+
+  const active = await activeTemplateIds(s, '2026-03');
+  const next = copyFromPrevious({ salarySatang: 0, items: [] }, prev, 'replace', active);
+  assert.deepEqual(next.items.map((i) => i.templateId), [null, live.templateId, null]);
   assert.equal(next.items[0].paid, undefined);
-  assert.notEqual(next.items[0].id, 'itm_tax');
+  assert.notEqual(next.items[0].id, ended.id);
+
+  // append: รายการที่หมดอายุไม่ถือเป็นรายการประจำซ้ำ จึงถูกเพิ่มเป็นรายการธรรมดา
+  const cur = { salarySatang: 0, items: [{ ...live, id: 'cur_l' }] };
+  const app = copyFromPrevious(cur, prev, 'append', active);
+  assert.deepEqual(app.items.map((i) => i.templateId), [live.templateId, null, null]);
+
+  // ไม่ส่ง activeTplIds = คง templateId ไว้ (ใช้กับโค้ดเดิม)
+  assert.equal(copyFromPrevious({ items: [] }, prev).items[0].templateId, ended.templateId);
 });
 
 test('copyFromPrevious append: รายการประจำซ้ำไม่ถูกเพิ่ม, รายการธรรมดาชื่อซ้ำยังเพิ่ม, เงินเดือนใช้ของเดือนก่อน', () => {
@@ -251,7 +263,7 @@ test('copyFromPrevious append: รายการประจำซ้ำไม�
   assert.equal(new Set(r.items.map((i) => i.id)).size, 4, 'id ไม่ซ้ำ');
 });
 
-test('stopRecurring เมื่อ lastMonth อยู่หลัง endMonth เดิม: ต้องไม่ยืด endMonth ออกไป', { todo: 'บั๊กที่พบตอนเขียนเทสต์ รอเจ้าของตัดสินว่าจะให้แก้ไหม' }, async () => {
+test('stopRecurring เมื่อ lastMonth อยู่หลัง endMonth เดิม: ต้องไม่ยืด endMonth ออกไป', async () => {
   const s = fresh();
   const item = await enableRecurring(s, '2026-01', tax(), '2026-03');
   await stopRecurring(s, item.templateId, '2026-06');

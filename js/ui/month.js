@@ -12,7 +12,7 @@ import {
 } from '../format.js';
 import {
   loadMonth, findPrevSaved, copyFromPrevious, enableRecurring, updateRecurring,
-  stopRecurring, getTemplate, firstDataYear, newId,
+  stopRecurring, getTemplate, firstDataYear, newId, activeTemplateIds,
 } from '../months.js';
 import { html, mount, $, debounce, choose, toast, bindMoneyInputs } from './dom.js';
 import { icons, pig } from './icons.js';
@@ -281,7 +281,7 @@ export async function renderMonth(root, app, key) {
       });
       if (!mode) return;
     }
-    const next = copyFromPrevious(m, prev.doc, mode);
+    const next = copyFromPrevious(m, prev.doc, mode, await activeTemplateIds(store, key));
     m.salarySatang = next.salarySatang;
     m.items = next.items;
     refreshSalary();
