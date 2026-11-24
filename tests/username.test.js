@@ -53,3 +53,22 @@ test('ชื่อที่ใช้ล่าสุด: ใหม่สุดก
   s.setItem('salary-calc:recent-names', 'not json');
   assert.deepEqual(getRecentNames(s), []);
 });
+
+test('ชื่อผู้ใช้ตอนสมัคร: อังกฤษ/ตัวเลข/_ เท่านั้น, 3–20 ตัว, ขึ้นต้นด้วยตัวอักษร', async () => {
+  const { checkNewUsername: c } = await import('../js/username.js');
+  assert.deepEqual(c('  Baifern_23 '), { username: 'baifern_23', error: null });
+  assert.equal(c('pao').error, null);
+  assert.equal(c('a'.repeat(20)).error, null);
+  assert.match(c('').error, /กรอกชื่อผู้ใช้/);
+  assert.match(c('มะลิ').error, /ภาษาอังกฤษ/);
+  assert.match(c('mali chan').error, /ภาษาอังกฤษ/);   // เว้นวรรค
+  assert.match(c('mali.chan').error, /ภาษาอังกฤษ/);   // อักขระพิเศษ
+  assert.match(c('mali@x').error, /ภาษาอังกฤษ/);
+  assert.match(c('é99').error, /ภาษาอังกฤษ/);
+  assert.match(c('9lives').error, /ขึ้นต้น/);
+  assert.match(c('_mali').error, /ขึ้นต้น/);
+  assert.match(c('ab').error, /3–20/);
+  assert.match(c('a'.repeat(21)).error, /3–20/);
+  assert.match(c('mali__chan').error, /_/);
+  assert.match(c('mali_').error, /_/);
+});

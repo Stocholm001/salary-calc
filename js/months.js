@@ -34,10 +34,11 @@ export function itemFromTemplate(tpl, id = newId('itm')) {
   return normalizeItem(item);
 }
 
-/** ค่าฟิลด์จาก template ทับลงรายการเดิม โดยคง id และ offDays ของเดือนนั้นไว้ */
+/** ค่าฟิลด์จาก template ทับลงรายการเดิม โดยคง id, offDays และสถานะชำระของเดือนนั้นไว้ */
 function applyTemplate(item, tpl) {
   const next = { id: item.id, ...pick(tpl, TEMPLATE_FIELDS), templateId: tpl.id };
   if (next.method === 'daily') next.offDays = item.method === 'daily' ? (item.offDays ?? 0) : 0;
+  if (next.kind === 'deduct' && item.paid) next.paid = true;
   return normalizeItem(next);
 }
 
@@ -80,6 +81,7 @@ export function copyFromPrevious(current, prevDoc, mode = 'replace') {
   const copied = (prevDoc.items ?? []).map((it) => {
     const c = { ...clone(it), id: newId('itm') };
     if (c.method === 'daily') c.offDays = 0;
+    delete c.paid; // เดือนใหม่ยังไม่ได้ชำระ
     return c;
   });
   if (mode === 'append') {
@@ -106,7 +108,7 @@ export async function enableRecurring(store, key, item, endMonth = null) {
   for (const k of await savedMonthsAfter(store, key)) {
     if (!isTemplateActive(tpl, k)) continue;
     const doc = await store.getMonth(k);
-    if (doc.items.some((it) => it.templateId === tpl.id)) continue;
+    if (!doc || doc.items.some((it) => it.templateId === tpl.id)) continue;
     doc.items.push(itemFromTemplate(tpl));
     await store.saveMonth(k, doc);
   }
@@ -117,6 +119,8 @@ export async function enableRecurring(store, key, item, endMonth = null) {
  * แก้รายการประจำแบบ "เดือนนี้และเดือนถัดไป"
  * แก้ template และรายการที่มี templateId เดียวกันในเดือนถัดไปที่บันทึกแล้ว
  * เดือนที่เลยวันสิ้นสุดใหม่ ให้เอารายการออก, เดือนก่อนหน้าไม่เปลี่ยน
+ * ถ้าขยายวันสิ้นสุด เดือนที่บันทึกแล้วซึ่งเคยอยู่นอกช่วงเดิมจะได้รายการเพิ่ม
+ * (เดือนที่อยู่ในช่วงเดิมแต่ไม่มีรายการ = ผู้ใช้ลบ "เฉพาะเดือนนี้" ไว้ ไม่ใส่คืน)
  * @returns item ใหม่ของเดือนปัจจุบัน
  */
 export async function updateRecurring(store, key, item, endMonth) {
@@ -129,10 +133,19 @@ export async function updateRecurring(store, key, item, endMonth) {
     endMonth: endMonth === undefined ? (old?.endMonth ?? null) : endMonth,
   };
   await store.saveTemplate(tpl);
+  // ไม่รู้ช่วงเดิม (template หาย) → ถือว่าเคยใช้งานทุกเดือน จะได้ไม่ใส่รายการคืนในเดือนที่ผู้ใช้ลบไว้
+  const wasActive = (k) => (old ? isTemplateActive(old, k) : true);
   for (const k of await savedMonthsAfter(store, key)) {
     const doc = await store.getMonth(k);
+    if (!doc) continue;
     const idx = doc.items.findIndex((it) => it.templateId === tpl.id);
-    if (idx === -1) continue;
+    if (idx === -1) {
+      if (isTemplateActive(tpl, k) && !wasActive(k)) {
+        doc.items.push(itemFromTemplate(tpl));
+        await store.saveMonth(k, doc);
+      }
+      continue;
+    }
     if (isTemplateActive(tpl, k)) doc.items[idx] = applyTemplate(doc.items[idx], tpl);
     else doc.items.splice(idx, 1);
     await store.saveMonth(k, doc);
@@ -153,6 +166,7 @@ export async function stopRecurring(store, templateId, lastMonth) {
   }
   for (const k of await savedMonthsAfter(store, lastMonth)) {
     const doc = await store.getMonth(k);
+    if (!doc) continue;
     const items = doc.items.filter((it) => it.templateId !== templateId);
     if (items.length !== doc.items.length) await store.saveMonth(k, { ...doc, items });
   }

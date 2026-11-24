@@ -184,3 +184,115 @@ test('สรุปทั้งปี: นับเฉพาะเดือนท
   assert.equal(await firstDataYear(s), 2025);
   assert.equal(summarizeYear(2030, {}).savedCount, 0);
 });
+
+test('สถานะชำระ: คัดลอกเดือนก่อนแล้วเป็น "ยังไม่ชำระ", แก้รายการประจำแล้วสถานะเดือนถัดไปไม่หาย', async () => {
+  const next = copyFromPrevious({ salarySatang: 0, items: [] }, { salarySatang: 3000000, items: [tax({ paid: true })] });
+  assert.equal(next.items[0].paid, undefined);
+
+  const s = fresh();
+  const item = await enableRecurring(s, '2026-11', tax());
+  await s.saveMonth('2026-11', { salarySatang: 3000000, items: [item] });
+  const dec = await loadMonth(s, '2026-12');
+  dec.items[0].paid = true;
+  await s.saveMonth('2026-12', { salarySatang: 3000000, items: dec.items });
+  await updateRecurring(s, '2026-11', { ...item, amountSatang: 130000 }, null);
+  const after = await s.getMonth('2026-12');
+  assert.equal(after.items[0].amountSatang, 130000);
+  assert.equal(after.items[0].paid, true);
+});
+
+// ---------- เพิ่มจากรีวิว ----------
+
+test('updateRecurring: ขยาย endMonth → เดือนที่บันทึกแล้วซึ่งเคยอยู่นอกช่วงได้รายการเพิ่ม', async () => {
+  const s = fresh();
+  for (const k of ['2026-01', '2026-02', '2026-03', '2026-04']) await s.saveMonth(k, { salarySatang: 3000000, items: [] });
+  const item = await enableRecurring(s, '2026-01', tax(), '2026-02');
+  await s.saveMonth('2026-01', { salarySatang: 3000000, items: [item] });
+  const count = async () => Promise.all(['2026-02', '2026-03', '2026-04'].map(async (k) => (await s.getMonth(k)).items.length));
+  assert.deepEqual(await count(), [1, 0, 0]);
+
+  await updateRecurring(s, '2026-01', item, '2026-03'); // ขยาย 1 เดือน
+  assert.deepEqual(await count(), [1, 1, 0]);
+  await updateRecurring(s, '2026-01', item, null); // ไม่มีวันสิ้นสุด
+  assert.deepEqual(await count(), [1, 1, 1]);
+  await updateRecurring(s, '2026-01', item, null); // ทำซ้ำต้องไม่เพิ่มซ้ำ
+  assert.deepEqual(await count(), [1, 1, 1]);
+  await updateRecurring(s, '2026-01', item, '2026-02'); // ย่อกลับ
+  assert.deepEqual(await count(), [1, 0, 0]);
+  assert.equal((await s.listTemplates())[0].endMonth, '2026-02');
+});
+
+test('updateRecurring: เดือนในช่วงเดิมที่ผู้ใช้ลบ "เฉพาะเดือนนี้" ไว้ ต้องไม่ได้รายการคืน', async () => {
+  const s = fresh();
+  for (const k of ['2026-01', '2026-02', '2026-03']) await s.saveMonth(k, { salarySatang: 3000000, items: [] });
+  const item = await enableRecurring(s, '2026-01', tax(), null);
+  await s.saveMonth('2026-02', { salarySatang: 3000000, items: [] }); // ลบเฉพาะเดือน 02
+  await updateRecurring(s, '2026-01', { ...item, amountSatang: 130000 }, null);
+  assert.equal((await s.getMonth('2026-02')).items.length, 0);
+  assert.equal((await s.getMonth('2026-03')).items[0].amountSatang, 130000);
+});
+
+test('copyFromPrevious: template ที่หมดอายุแล้ว (พฤติกรรมปัจจุบัน: templateId ติดมาด้วย)', async () => {
+  // ⚪ ในรีวิว ยังไม่ได้ตัดสินว่าควรตัด templateId ทิ้งหรือไม่ ถ้าเปลี่ยนพฤติกรรมให้แก้เทสต์นี้
+  const prev = { salarySatang: 3000000, items: [tax({ templateId: 'tpl_ended', paid: true })] };
+  const next = copyFromPrevious({ salarySatang: 0, items: [] }, prev, 'replace');
+  assert.equal(next.items[0].templateId, 'tpl_ended');
+  assert.equal(next.items[0].paid, undefined);
+  assert.notEqual(next.items[0].id, 'itm_tax');
+});
+
+test('copyFromPrevious append: รายการประจำซ้ำไม่ถูกเพิ่ม, รายการธรรมดาชื่อซ้ำยังเพิ่ม, เงินเดือนใช้ของเดือนก่อน', () => {
+  const cur = { salarySatang: 2000000, items: [tax({ id: 'x1', templateId: 'tpl_t' }), park({ id: 'x2' })] };
+  const prev = { salarySatang: 3000000, items: [tax({ templateId: 'tpl_t' }), park({ offDays: 4 }), tax({ templateId: 'tpl_other' })] };
+  const r = copyFromPrevious(cur, prev, 'append');
+  assert.equal(r.salarySatang, 3000000);
+  assert.deepEqual(r.items.map((i) => i.templateId), ['tpl_t', null, null, 'tpl_other']);
+  assert.equal(r.items[2].offDays, 0);
+  assert.equal(new Set(r.items.map((i) => i.id)).size, 4, 'id ไม่ซ้ำ');
+});
+
+test('stopRecurring เมื่อ lastMonth อยู่หลัง endMonth เดิม: ต้องไม่ยืด endMonth ออกไป', { todo: 'บั๊กที่พบตอนเขียนเทสต์ รอเจ้าของตัดสินว่าจะให้แก้ไหม' }, async () => {
+  const s = fresh();
+  const item = await enableRecurring(s, '2026-01', tax(), '2026-03');
+  await stopRecurring(s, item.templateId, '2026-06');
+  assert.equal((await s.listTemplates())[0].endMonth, '2026-03');
+  assert.equal((await loadMonth(s, '2026-05')).items.length, 0);
+});
+
+test('เดือนที่ข้อมูลเสีย (getMonth คืน null): enable/update/stopRecurring ข้ามไป ไม่ throw', async () => {
+  const storage = createMemoryStorage();
+  const s = createLocalStore(storage, 'test');
+  await s.saveMonth('2026-03', { salarySatang: 3000000, items: [] });
+  storage.setItem('test:months:2026-02', '{bad json');
+  assert.deepEqual(await s.listMonthKeys(), ['2026-02', '2026-03']);
+  assert.equal(await s.getMonth('2026-02'), null);
+
+  const item = await enableRecurring(s, '2026-01', tax());
+  assert.equal((await s.getMonth('2026-03')).items.length, 1);
+  await updateRecurring(s, '2026-01', { ...item, amountSatang: 1 }, null);
+  assert.equal((await s.getMonth('2026-03')).items[0].amountSatang, 1);
+  await stopRecurring(s, item.templateId, '2026-01');
+  assert.equal((await s.getMonth('2026-03')).items.length, 0);
+  assert.equal((await findPrevSaved(s, '2026-03')), null, 'เดือนเสียไม่ถูกใช้เป็นเดือนก่อนหน้า');
+});
+
+test('loadMonth ข้ามปี: ร่าง ม.ค. ใช้เงินเดือนจาก ธ.ค. ปีก่อน / ข้ามหลายปี', async () => {
+  const s = fresh();
+  await s.saveMonth('2024-06', { salarySatang: 2500000, items: [] });
+  await s.saveMonth('2025-12', { salarySatang: 3000000, items: [] });
+  assert.equal((await loadMonth(s, '2026-01')).salarySatang, 3000000);
+  assert.equal((await loadMonth(s, '2025-03')).salarySatang, 2500000);
+  assert.equal((await loadMonth(s, '2024-01')).salarySatang, 0);
+});
+
+test('summarizeYear: kind ไม่รู้จักไม่ถูกนับ, ชื่อรายการ trim แล้วรวมกัน, ชื่อว่างใช้ชื่อแทน', () => {
+  const y = summarizeYear(2026, {
+    '2026-01': { salarySatang: 3000000, items: [tax({ name: ' ภาษี' }), { ...tax({ name: 'ลึกลับ' }), kind: 'x' }] },
+    '2026-02': { salarySatang: 3000000, items: [tax({ name: 'ภาษี  ' }), tax({ name: '   ', amountSatang: 100 })] },
+  });
+  assert.equal(y.deductSatang, 120000 * 2 + 100);
+  assert.deepEqual(y.deductByName.map((r) => r.amountSatang), [240000, 100]);
+  assert.equal(y.deductByName[0].name, 'ภาษี');
+  assert.ok(y.deductByName[1].name.trim().length > 0, 'ชื่อว่างต้องแสดงเป็นชื่อแทน');
+  assert.ok(!y.deductByName.some((r) => r.name === 'ลึกลับ'));
+});

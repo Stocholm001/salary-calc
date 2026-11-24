@@ -5,7 +5,7 @@ import { calcItem, switchAnchor, amountFromBp, bpOf, resolveBase } from '../calc
 import { countDays, monthShort, yearNumber, monthKey, parseMonthKey, weekdayShort, weekdayFull } from '../dates.js';
 import { t as tr } from '../i18n.js';
 import { formatMoney, formatPct, parseMoney, parsePercent, dailySummaryLines, pctOfSalaryText } from '../format.js';
-import { html, mount, $, $$ } from './dom.js';
+import { html, mount, $, $$, bindMoneyInputs } from './dom.js';
 import { icons } from './icons.js';
 
 /** ฟิลด์ที่ถ้าเปลี่ยนต้องถามว่าแก้ template ด้วยไหม (offDays เป็นของเดือนนั้นเท่านั้น) */
@@ -47,10 +47,14 @@ export function openItemSheet(opts) {
 
   // ค่าที่แสดงในช่องบาท/% (ช่องที่ไม่ได้ยึดคำนวณจากช่องที่ยึด)
   const baseSatang = () => (resolveBase(d) === 'gross' ? ctx.grossSatang : ctx.salarySatang);
-  if (d.method === 'fixed') {
+
+  /** คำนวณค่าของช่องที่ไม่ได้ยึดใหม่จากช่องที่ยึด (เฉพาะใน d ไม่แตะ DOM) เช่น หลังเปลี่ยนฐานหรือประเภท */
+  function recomputeOther() {
+    if (d.method !== 'fixed') return;
     if (d.anchor === 'percent' && d.bp != null) d.amountSatang = amountFromBp(baseSatang(), d.bp);
     if (d.anchor === 'amount' && d.amountSatang != null) d.bp = bpOf(d.amountSatang, baseSatang());
   }
+  recomputeOther();
 
   const weekdayOrder = opts.weekStartsMonday ? [1, 2, 3, 4, 5, 6, 7] : [7, 1, 2, 3, 4, 5, 6];
 
@@ -242,15 +246,11 @@ export function openItemSheet(opts) {
       $$('#seg-anchor [data-anchor]', dlg).forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.anchor === d.anchor)));
     }
 
-    /** คำนวณช่องที่ไม่ได้ยึดใหม่ (เช่น เปลี่ยนฐาน) */
+    /** คำนวณช่องที่ไม่ได้ยึดใหม่ แล้วอัปเดตช่องบนจอ (เช่น เปลี่ยนฐาน) */
     function syncOtherField() {
-      if (d.anchor === 'amount' && d.amountSatang != null) {
-        d.bp = bpOf(d.amountSatang, baseSatang());
-        $('#f-pct', dlg).value = pctText(d.bp);
-      } else if (d.anchor === 'percent' && d.bp != null) {
-        d.amountSatang = amountFromBp(baseSatang(), d.bp);
-        $('#f-amount', dlg).value = moneyText(d.amountSatang);
-      }
+      recomputeOther();
+      $('#f-amount', dlg).value = moneyText(d.amountSatang);
+      $('#f-pct', dlg).value = pctText(d.bp);
     }
 
     refreshHead();
@@ -265,9 +265,11 @@ export function openItemSheet(opts) {
       if (t.dataset.kind) {
         d.kind = t.dataset.kind;
         if (d.kind === 'income') d.base = 'salary';
+        recomputeOther(); // ฐานอาจเปลี่ยนจาก gross เป็น salary
         refreshHead(); refreshBody();
       } else if (t.dataset.method) {
         d.method = t.dataset.method;
+        recomputeOther();
         refreshHead(); refreshBody();
       } else if (t.dataset.base) {
         d.base = t.dataset.base;
@@ -279,6 +281,12 @@ export function openItemSheet(opts) {
         const ready = d.anchor === 'amount' ? d.amountSatang != null : d.bp != null;
         if (ready) {
           const s = switchAnchor({ ...draftItem(), method: 'fixed' }, to, ctx);
+          if (s.anchor !== to) {
+            // ฐานเป็น 0 คิด % ไม่ได้ → คงยึดตามบาทไว้ จำนวนเงินจะได้ไม่หาย
+            $('#err-value', dlg).textContent = tr('sheet.pctNoBase');
+            return;
+          }
+          $('#err-value', dlg).textContent = '';
           d.anchor = to;
           if (to === 'percent') { d.bp = s.bp; d.amountSatang = amountFromBp(baseSatang(), s.bp); }
           else { d.amountSatang = s.amountSatang; d.bp = bpOf(s.amountSatang, baseSatang()); }
@@ -310,6 +318,7 @@ export function openItemSheet(opts) {
       }
     });
 
+    bindMoneyInputs(dlg, '#f-amount, #f-cap, #f-rate');
     dlg.addEventListener('input', (e) => {
       const t = e.target;
       const err = $('#err-value', dlg);

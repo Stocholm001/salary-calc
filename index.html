@@ -6,6 +6,12 @@
   <title>กระปุกเงินเดือน</title>
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#FFE89A">
+  <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="กระปุกเงินเดือน">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Mitr:wght@300;400;500;600&display=swap">
@@ -14,6 +20,42 @@
 <body>
   <div id="app"></div>
   <noscript>ต้องเปิด JavaScript เพื่อใช้งานกระปุกเงินเดือน</noscript>
-  <script type="module" src="js/app.js"></script>
+  <script>
+    // กันหน้าว่าง: ถ้าโค้ดแอปโหลดไม่สำเร็จ (เช่น เบราว์เซอร์ใช้ไฟล์เก่าในแคชปนกับไฟล์ใหม่)
+    // ให้แสดงข้อความพร้อมปุ่ม "โหลดใหม่" ที่ล้างแคชของไฟล์แอปก่อนรีเฟรช
+    (function () {
+      function showLoadError() {
+        if (window.__appStarted || document.getElementById('boot-fail')) return;
+        var app = document.getElementById('app');
+        if (!app || app.childElementCount) return;
+        app.innerHTML =
+          '<main class="login" id="boot-fail"><div class="login__hero">' +
+          '<h1 class="login__title">กระปุกเงินเดือน</h1>' +
+          '<p class="login__sub">โหลดแอปไม่สำเร็จ กดโหลดใหม่อีกครั้ง<br>Couldn’t load the app. Tap reload.</p></div>' +
+          '<button type="button" class="btn btn--primary btn--block" id="boot-reload">โหลดใหม่ / Reload</button></main>';
+        document.getElementById('boot-reload').onclick = hardReload;
+      }
+      function hardReload() {
+        var btn = document.getElementById('boot-reload');
+        btn.disabled = true;
+        // ดึงรายชื่อไฟล์แอปจาก sw.js แล้วโหลดใหม่จากเซิร์ฟเวอร์ทุกไฟล์ (ข้ามแคช) ก่อนรีเฟรช
+        var clearSw = 'caches' in window
+          ? caches.keys().then(function (ks) { return Promise.all(ks.map(function (k) { return caches.delete(k); })); })
+          : Promise.resolve();
+        clearSw
+          .then(function () { return fetch('sw.js', { cache: 'reload' }); })
+          .then(function (r) { return r.text(); })
+          .then(function (txt) {
+            var files = (txt.match(/'\.\/[^']+'/g) || []).map(function (s) { return s.slice(1, -1); });
+            return Promise.all(files.map(function (f) { return fetch(f, { cache: 'reload' }).catch(function () {}); }));
+          })
+          .catch(function () {})
+          .then(function () { location.reload(); });
+      }
+      window.addEventListener('error', function () { setTimeout(showLoadError, 0); });
+      window.addEventListener('load', function () { setTimeout(showLoadError, 8000); });
+    })();
+  </script>
+  <script type="module" src="js/app.js" onerror="setTimeout(function(){window.dispatchEvent(new Event('error'))},0)"></script>
 </body>
 </html>

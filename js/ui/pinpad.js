@@ -36,8 +36,9 @@ export function createPinPad(root, { onComplete, length = 6 }) {
     $('#pin-count', root).textContent = t('pin.count', { n: pin.length, total: length });
   }
 
+  let locked = false;
   async function press(key) {
-    if (busy) return;
+    if (busy || locked) return;
     if (key === 'del') pin = pin.slice(0, -1);
     else if (pin.length < length) pin += key;
     draw();
@@ -50,7 +51,7 @@ export function createPinPad(root, { onComplete, length = 6 }) {
 
   function setBusy(v) {
     busy = v;
-    root.querySelectorAll('.pin__key').forEach((b) => { b.disabled = v; });
+    root.querySelectorAll('.pin__key').forEach((b) => { b.disabled = busy || locked; });
   }
 
   const onClick = (e) => {
@@ -79,6 +80,12 @@ export function createPinPad(root, { onComplete, length = 6 }) {
       setTimeout(() => { pin = ''; draw(); }, 350);
     },
     setBusy,
+    /** ล็อกปุ่มทั้งหมด (ใส่ PIN ผิดหลายครั้ง) */
+    lock(v) {
+      locked = v;
+      if (v) { pin = ''; draw(); }
+      setBusy(busy);
+    },
     destroy() {
       destroyed = true;
       busy = true;

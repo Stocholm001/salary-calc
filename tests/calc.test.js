@@ -191,3 +191,69 @@ test('describeItem ของรายการต่อวันและจำ�
   const pvd = fixedPct(300);
   assert.equal(describeItem(pvd, calcItem(pvd, ctx)), '3% ของเงินเดือน');
 });
+
+// ---------- เพิ่มจากรีวิว: switchAnchor กรณีพิเศษ ----------
+
+test('switchAnchor: เงินเดือน 0 สลับไปยึด % ไม่ได้ → คงยึดตามบาท จำนวนเงินไม่หาย', () => {
+  const ctx0 = { ...NOV_2026, salarySatang: 0, grossSatang: 0 };
+  const a = switchAnchor(fixedAmt(100000, { bp: null }), 'percent', ctx0);
+  assert.equal(a.anchor, 'amount');
+  assert.equal(a.amountSatang, 100000);
+  const b = switchAnchor(fixedAmt(100000, { bp: 500 }), 'percent', ctx0);
+  assert.equal(b.anchor, 'amount', 'bp ค้างเก่าต้องไม่ถูกนำมาใช้');
+  assert.equal(calcItem(b, ctx0).amountSatang, 100000);
+});
+
+test('switchAnchor: ฐาน gross และกรณีถูก cap', () => {
+  const ctx = { ...NOV_2026, salarySatang: 3000000, grossSatang: 3250000 };
+  // 1,000 บน gross 32,500 = 3.08% → ยึด % → 1,001.00
+  const g = switchAnchor(fixedAmt(100000, { base: 'gross' }), 'percent', ctx);
+  assert.equal(g.bp, 308);
+  assert.equal(calcItem(g, ctx).amountSatang, 100100);
+  // 5% ของ 30,000 cap 875 → ยึดบาท ได้ 875.00 (ค่าที่ผู้ใช้เห็น)
+  const c = switchAnchor(fixedPct(500, { capSatang: 87500 }), 'amount', ctx);
+  assert.equal(c.amountSatang, 87500);
+  assert.equal(calcItem(c, ctx).capped, false);
+  // 2,000 บาท cap 875 → ยึด % ได้ 6.67% และจำนวนเงินยังถูก cap ที่ 875.00
+  const p = switchAnchor(fixedAmt(200000, { capSatang: 87500 }), 'percent', ctx);
+  assert.equal(p.bp, 667);
+  assert.equal(calcItem(p, ctx).amountSatang, 87500);
+});
+
+// ---------- เพิ่มจากรีวิว: ข้อมูลเสียต้องไม่ทำให้ได้ NaN หรือ throw ----------
+
+test('calcItem/calcMonth: ข้อมูลเสีย (string, NaN, ทศนิยม, null) ไม่ได้ NaN และไม่ throw', () => {
+  const ctx = { ...NOV_2026, salarySatang: 3000000 };
+  assert.equal(calcItem(daily(5000, 'abc'), ctx).amountSatang, 105000, 'offDays ไม่ใช่ตัวเลข → 0');
+  assert.equal(calcItem(daily(5000, NaN), ctx).amountSatang, 105000);
+  assert.equal(calcItem(daily(5000, '2'), ctx).amountSatang, 95000);
+  assert.equal(calcItem(daily(5000, -3), ctx).amountSatang, 105000, 'ติดลบ → 0');
+  assert.equal(calcItem(daily(5000, 1.7), ctx).amountSatang, 100000, 'ทศนิยมตัดทิ้ง');
+  assert.equal(calcItem(daily('5000', 0, { weekdays: ['1', '2', '3', '4', '5'] }), ctx).amountSatang, 105000);
+  assert.equal(calcItem(fixedPct(12.5), ctx).amountSatang, 3000000 * 13 / 10000, 'bp ทศนิยม → ปัดครึ่งขึ้น');
+  // เงินเดือนทศนิยม 100.5 สตางค์ → ปัดเป็น 101 ไม่ throw
+  assert.equal(
+    calcItem(fixedAmt(90000), { ...ctx, salarySatang: 100.5 }).pctOfSalaryBp,
+    calcItem(fixedAmt(90000), { ...ctx, salarySatang: 101 }).pctOfSalaryBp,
+  );
+
+  const r = calcMonth({ ...NOV_2026, salarySatang: '3000000', items: [fixedAmt('90000')] });
+  assert.equal(r.deductSatang, 90000, 'ต้องบวกเป็นตัวเลข ไม่ใช่ต่อ string');
+  assert.equal(r.deductPctBp, 300);
+
+  const n = calcMonth({ ...NOV_2026, salarySatang: null, items: [fixedAmt(50000)] });
+  assert.equal(n.salarySatang, 0);
+  assert.equal(n.deductPctBp, null);
+  assert.equal(n.netSatang, -50000);
+});
+
+test('calcMonth: kind/method ไม่รู้จักไม่ถูกนับ และไม่ throw ทั้งเดือน', () => {
+  const r = calcMonth({
+    ...NOV_2026, salarySatang: 100000,
+    items: [fixedAmt(5000), { ...fixedAmt(7000), kind: 'x' }, { ...fixedAmt(9000), method: 'zzz' }],
+  });
+  assert.equal(r.deductSatang, 5000);
+  assert.equal(r.items[1].result, undefined);
+  assert.equal(r.items[2].result, undefined);
+  assert.throws(() => calcItem({ ...fixedAmt(1), method: 'zzz' }, NOV_2026), TypeError, 'เรียก calcItem ตรง ๆ ยัง throw');
+});

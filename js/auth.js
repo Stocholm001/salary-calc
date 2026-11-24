@@ -34,9 +34,24 @@ export async function initFirebase() {
   ]);
   const app = appMod.initializeApp(firebaseConfig);
   const auth = authMod.initializeAuth(app, { persistence: authMod.browserLocalPersistence });
-  const db = fsMod.getFirestore(app);
+  const db = initDb(fsMod, app);
   fb = { app, auth, db, A: authMod, F: fsMod };
   return fb;
+}
+
+/**
+ * Firestore แบบมี cache ใน IndexedDB: เปิดแอปตอนออฟไลน์ยังอ่านข้อมูลที่เคยโหลดได้
+ * และงานเขียนที่ค้างอยู่จะไม่หายเมื่อปิดแอป ถ้าเบราว์เซอร์ไม่รองรับให้ใช้แบบปกติ (cache ในหน่วยความจำ)
+ */
+function initDb(fsMod, app) {
+  try {
+    return fsMod.initializeFirestore(app, {
+      localCache: fsMod.persistentLocalCache({ tabManager: fsMod.persistentMultipleTabManager() }),
+    });
+  } catch (err) {
+    console.warn('Firestore offline cache ใช้ไม่ได้:', err);
+    return fsMod.getFirestore(app);
+  }
 }
 
 /** ผู้ใช้ปัจจุบันหลัง Firebase อ่าน session เสร็จ (null ถ้ายังไม่ล็อกอิน) */
@@ -57,15 +72,16 @@ export async function usernameExists(username) {
 export async function signIn(username, pin) {
   const { auth, A } = fb;
   const cred = await A.signInWithEmailAndPassword(auth, usernameToEmail(username, AUTH_EMAIL_DOMAIN), pin);
-  await ensureUserDocs(cred.user.uid, username, username);
+  await ensureUserDocs(cred.user.uid, username, { displayName: username });
   return cred.user;
 }
 
 /**
  * ผู้ใช้ใหม่: สร้างบัญชี แล้วสร้าง usernames/{username} และ users/{uid}
+ * @param profile ผลจาก validateProfile(): { firstName, lastName, birthDate, displayName }
  * ถ้าบัญชีมีอยู่แล้วแต่เอกสารยังไม่ครบ (เช่น เน็ตหลุดตอนสมัครครั้งก่อน) จะลองล็อกอินด้วย PIN นี้แล้วซ่อมเอกสารให้
  */
-export async function signUp(username, displayName, pin) {
+export async function signUp(username, profile, pin) {
   const { auth, A } = fb;
   const email = usernameToEmail(username, AUTH_EMAIL_DOMAIN);
   let user;
@@ -75,12 +91,12 @@ export async function signUp(username, displayName, pin) {
     if (err?.code !== 'auth/email-already-in-use') throw err;
     user = (await A.signInWithEmailAndPassword(auth, email, pin)).user;
   }
-  await ensureUserDocs(user.uid, username, displayName);
+  await ensureUserDocs(user.uid, username, profile);
   return user;
 }
 
 /** สร้าง usernames/{username} และ users/{uid} ถ้ายังไม่มี */
-async function ensureUserDocs(uid, username, displayName) {
+async function ensureUserDocs(uid, username, profile) {
   const { db, F } = fb;
   const nameRef = F.doc(db, 'usernames', username);
   const userRef = F.doc(db, 'users', uid);
@@ -88,7 +104,10 @@ async function ensureUserDocs(uid, username, displayName) {
   if (!nameSnap.exists()) await F.setDoc(nameRef, { uid });
   if (!userSnap.exists()) {
     await F.setDoc(userRef, {
-      displayName: String(displayName).trim() || username,
+      displayName: String(profile.displayName ?? '').trim() || username,
+      firstName: profile.firstName ?? '',
+      lastName: profile.lastName ?? '',
+      birthDate: profile.birthDate ?? null,
       username,
       createdAt: F.serverTimestamp(),
       settings: { ...DEFAULT_SETTINGS },

@@ -33,6 +33,31 @@ export function usernameToEmail(username, domain) {
 
 export const isValidPin = (pin) => /^\d{6}$/.test(pin);
 
+// ---------- ชื่อผู้ใช้ตอนสมัครใหม่ ----------
+// มาตรฐานทั่วไป: ภาษาอังกฤษ a–z, ตัวเลข 0–9 และ _ เท่านั้น, ยาว 3–20 ตัว, ขึ้นต้นด้วยตัวอักษร,
+// ไม่มี _ ติดกันหรือลงท้ายด้วย _ , ไม่สนตัวพิมพ์ใหญ่/เล็ก (เก็บเป็นตัวเล็ก)
+// บัญชีเก่าที่สมัครก่อนมีกฎนี้ (เช่น ชื่อภาษาไทย) ยังเข้าสู่ระบบได้ตามปกติผ่าน normalizeUsername
+
+export const NEW_USERNAME_MIN = 3;
+export const NEW_USERNAME_MAX = 20;
+
+/**
+ * ตรวจชื่อผู้ใช้ตอนสมัคร (ไม่แก้ค่าที่กรอกให้เงียบ ๆ แต่บอกว่าผิดตรงไหน)
+ * @returns {{ username: string, error: string|null }}
+ */
+export function checkNewUsername(raw) {
+  const s = String(raw ?? '').trim();
+  const username = s.toLowerCase();
+  let error = null;
+  if (!s) error = t('user.required');
+  else if (!/^[A-Za-z0-9_]+$/.test(s)) error = t('user.charset');
+  else if (!/^[a-z]/.test(username)) error = t('user.startLetter');
+  else if (username.length < NEW_USERNAME_MIN || username.length > NEW_USERNAME_MAX) {
+    error = t('user.length', { min: NEW_USERNAME_MIN, max: NEW_USERNAME_MAX });
+  } else if (/__/.test(username) || username.endsWith('_')) error = t('user.underscore');
+  return { username, error };
+}
+
 // ---------- ชื่อที่ใช้ล่าสุดในเครื่องนี้ (localStorage) ----------
 
 const RECENT_KEY = 'salary-calc:recent-names';

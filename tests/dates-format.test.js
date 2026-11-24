@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 
 import {
   toBE, toCE, daysInMonth, isoWeekday, weekdaysLabel, monthLabel,
-  monthKey, parseMonthKey, addMonths, yearOptions,
+  monthKey, parseMonthKey, addMonths, yearOptions, countDays,
 } from '../js/dates.js';
 import {
   formatMoney, formatMoneyCompact, formatPct, formatPctCompact, maskMoney, HIDDEN,
@@ -105,4 +105,54 @@ test('ข้อความอื่น ๆ', () => {
   assert.equal(methodBadge({ method: 'daily' }), 'ต่อวัน');
   assert.equal(methodBadge({ method: 'fixed', anchor: 'percent' }), '%');
   assert.equal(methodBadge({ method: 'fixed', anchor: 'amount' }), 'คงที่');
+});
+
+// ---------- เพิ่มจากรีวิว ----------
+
+test('parseMoney: comma ต้องอยู่ตำแหน่งคั่นหลักที่ถูกต้อง, ช่องว่างกลางตัวเลขไม่รับ', () => {
+  assert.equal(parseMoney('1,000.50'), 100050);
+  assert.equal(parseMoney('1,234,567.89'), 123456789);
+  assert.equal(parseMoney('12,345.6'), 1234560);
+  assert.equal(parseMoney('  1,000  '), 100000, 'ช่องว่างหัวท้ายตัดทิ้ง');
+  assert.equal(parseMoney('5.'), 500);
+  assert.equal(parseMoney('1,5'), null, '1,5 ไม่ใช่ 15');
+  assert.equal(parseMoney('1,,0'), null);
+  assert.equal(parseMoney(',100'), null);
+  assert.equal(parseMoney('1000,000'), null);
+  assert.equal(parseMoney('1 000'), null);
+  assert.equal(parseMoney('1e3'), null);
+  assert.equal(parseMoney('１２'), null, 'ตัวเลข full-width');
+  assert.equal(parseMoney('๑๒'), null, 'ตัวเลขไทย');
+  assert.equal(parseMoney('99999999999999999'), null, 'เกิน safe integer');
+  assert.equal(parseMoney(null), null);
+  assert.equal(parseMoney(1500), 150000, 'รับ number ได้');
+});
+
+test('parsePercent: ไม่รับ comma เลย', () => {
+  assert.equal(parsePercent('1,5'), null);
+  assert.equal(parsePercent('1,000'), null);
+  assert.equal(parsePercent('1.5'), 150);
+  assert.equal(parsePercent(' 3 '), 300);
+});
+
+test('formatMoney: รับเฉพาะ integer (ข้อมูลต้องผ่าน sanitize ก่อน)', () => {
+  assert.throws(() => formatMoney(1.5), RangeError);
+  assert.throws(() => formatMoney(NaN), RangeError);
+  assert.equal(formatMoney(-5), '−0.05');
+});
+
+test('countDays: weekdays ซ้ำ / นอกช่วง 1–7 / ว่าง', () => {
+  assert.equal(countDays(2026, 11, [1, 1, 2, 2, 3, 4, 5]), 21, 'ค่าซ้ำนับครั้งเดียว');
+  assert.equal(countDays(2026, 11, [0, 8, -1, 1, 2, 3, 4, 5]), 21, 'ค่านอกช่วงไม่ถูกนับ');
+  assert.equal(countDays(2026, 11, []), 0);
+  assert.equal(countDays(2024, 2, [1, 2, 3, 4, 5, 6, 7]), 29, 'ปีอธิกสุรทิน');
+  assert.equal(countDays(2100, 2, [1, 2, 3, 4, 5, 6, 7]), 28, 'หารด้วย 100 ลงตัวแต่ไม่ลงตัวด้วย 400');
+  assert.equal(countDays(2000, 2, [1, 2, 3, 4, 5, 6, 7]), 29, 'หารด้วย 400 ลงตัว');
+});
+
+test('yearOptions: ปีแรกที่มีข้อมูลอยู่หลังปีปัจจุบัน → เริ่มที่ปีปัจจุบัน', () => {
+  const ys = yearOptions(2026, 2030);
+  assert.equal(ys[0], 2026);
+  assert.equal(ys.at(-1), 2036);
+  assert.equal(ys.length, 11);
 });

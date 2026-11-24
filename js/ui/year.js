@@ -4,7 +4,8 @@ import { monthName, monthShort, yearLabel, yearNumber, yearOptions } from '../da
 import { formatMoney, maskMoney, formatPct, HIDDEN } from '../format.js';
 import { loadYear, firstDataYear } from '../months.js';
 import { t } from '../i18n.js';
-import { html, mount, $ } from './dom.js';
+import { yearCsv, yearCsvFilename } from '../csv.js';
+import { html, mount, $, downloadText, toast } from './dom.js';
 import { icons } from './icons.js';
 
 export async function renderYear(root, app, year) {
@@ -33,7 +34,7 @@ export async function renderYear(root, app, year) {
 
     <div class="stat-row">
       <div class="stat"><p class="stat__label">${t('year.gross')}</p><p class="stat__val">${money(s.grossSatang)}</p></div>
-      <div class="stat"><p class="stat__label">${t('year.deduct')}</p><p class="stat__val stat__val--deduct">${money(-s.deductSatang)}</p></div>
+      <div class="stat"><p class="stat__label">${t('year.deduct')}</p><p class="stat__val stat__val--deduct">${formatMoney(-s.deductSatang)}</p></div>
     </div>
 
     <ul class="panel months">
@@ -48,7 +49,7 @@ export async function renderYear(root, app, year) {
                 </span>
               </span>
               <span class="month-row__net-val ${m.netSatang < 0 ? 'is-neg' : ''}">${money(m.netSatang)}</span>
-              <span class="month-row__sub">${t('year.rowSub', { gross: money(m.grossSatang), deduct: money(m.deductSatang), pct: formatPct(m.deductPctBp) })}</span>` : html`
+              <span class="month-row__sub">${t('year.rowSub', { gross: money(m.grossSatang), deduct: formatMoney(m.deductSatang), pct: formatPct(m.deductPctBp) })}</span>` : html`
               <span class="month-row__dots" aria-hidden="true"></span>
               <span class="month-row__empty">${t('year.notSaved')}</span>`}
           </a>
@@ -60,15 +61,27 @@ export async function renderYear(root, app, year) {
       ${s.deductByName.length ? html`
         <ul class="by-name">
           ${s.deductByName.map((r) => html`
-            <li><span>${r.name}</span><span class="amt-deduct">${money(-r.amountSatang)}</span></li>`)}
+            <li><span>${r.name}</span><span class="amt-deduct">${formatMoney(-r.amountSatang)}</span></li>`)}
         </ul>` : html`<p class="empty">${t('year.noDeduct')}</p>`}
     </section>
 
-    <button type="button" class="btn btn--dark btn--block" disabled aria-describedby="csv-note">
+    <button type="button" class="btn btn--dark btn--block" id="csv"
+            ${s.savedCount ? '' : html`disabled aria-describedby="csv-note"`}>
       ${icons.download()}<span>${t('year.csv', { year: yearNumber(year) })}</span>
     </button>
-    <p class="hint" id="csv-note">${t('year.csvSoon')}</p>
+    ${s.savedCount ? '' : html`<p class="hint" id="csv-note">${t('year.csvEmpty')}</p>`}
   `);
+
+  $('#csv', root).addEventListener('click', () => {
+    try {
+      const file = yearCsvFilename(year);
+      downloadText(file, yearCsv(s));
+      toast(t('year.csvDone', { file }));
+    } catch (err) {
+      console.error(err);
+      toast(t('csv.failed'));
+    }
+  });
 
   $('#sel-year', root).addEventListener('change', (e) => app.navigate(`#/year/${e.target.value}`));
   return null;

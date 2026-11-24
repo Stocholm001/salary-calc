@@ -17,6 +17,10 @@ import { icons } from './ui/icons.js';
 import { renderMonth } from './ui/month.js';
 import { renderYear } from './ui/year.js';
 import { renderSettings } from './ui/settings.js';
+import { initPwa } from './pwa.js';
+
+// โค้ดแอปโหลดครบแล้ว (index.html ใช้ตัดสินว่าจะแสดงหน้า "โหลดไม่สำเร็จ" หรือไม่)
+window.__appStarted = true;
 
 const now = new Date();
 export const CURRENT = { year: now.getFullYear(), month: now.getMonth() + 1 };
@@ -90,18 +94,48 @@ function tabbar(active) {
     </nav>`;
 }
 
+// เลขลำดับการเปลี่ยนหน้า: ถ้าผู้ใช้เปลี่ยนหน้าซ้อนระหว่างที่หน้าก่อนยังโหลดอยู่ ให้ทิ้งผลของหน้าเก่า
+let routeSeq = 0;
+
+/** วาดหน้าตาม hash ปัจจุบัน ไม่ throw: ถ้าโหลดไม่สำเร็จจะแสดงข้อความพร้อมปุ่มลองใหม่ในหน้านั้น */
 async function route() {
-  if (cleanup) { await cleanup(); cleanup = null; }
+  const seq = ++routeSeq;
+  if (cleanup) {
+    const done = cleanup;
+    cleanup = null;
+    try { await done(); } catch (err) { console.error(err); }
+  }
+  if (seq !== routeSeq) return;
+
   const r = parseRoute();
   if (r.name === 'month') saveLastMonth(r.key);
+  app.store.invalidate?.(); // อ่านข้อมูลล่าสุด (เช่น ที่แก้จากเครื่องอื่น) ทุกครั้งที่เปลี่ยนหน้า
 
   const root = $('#app');
   mount(root, html`<div class="view" id="view"></div>${tabbar(r.name)}`);
   const view = $('#view', root);
 
-  if (r.name === 'month') cleanup = await renderMonth(view, app, r.key);
-  else if (r.name === 'year') cleanup = await renderYear(view, app, r.year);
-  else cleanup = await renderSettings(view, app);
+  try {
+    let done;
+    if (r.name === 'month') done = await renderMonth(view, app, r.key);
+    else if (r.name === 'year') done = await renderYear(view, app, r.year);
+    else done = await renderSettings(view, app);
+    if (seq !== routeSeq) {
+      // มีการเปลี่ยนหน้าใหม่แล้ว หน้านี้ไม่ได้แสดง: เก็บงานที่ค้างแล้วทิ้ง
+      try { await done?.(); } catch (err) { console.error(err); }
+      return;
+    }
+    cleanup = done;
+  } catch (err) {
+    console.error(err);
+    if (seq !== routeSeq) return;
+    mount(view, html`
+      <div class="empty" role="alert">
+        <p>${t('fatal.data')}</p>
+        <button type="button" class="btn btn--primary" id="route-retry">${t('common.retry')}</button>
+      </div>`);
+    $('#route-retry', view).addEventListener('click', () => route());
+  }
 
   window.scrollTo(0, 0);
 }
@@ -120,7 +154,9 @@ async function startApp(store) {
     window.addEventListener('hashchange', route);
     // บันทึกงานที่ค้างก่อนปิด/ซ่อนแท็บ
     document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'hidden' && cleanup) cleanup({ keepAlive: true });
+      if (document.visibilityState === 'hidden' && cleanup) {
+        Promise.resolve(cleanup({ keepAlive: true })).catch((err) => console.error(err));
+      }
     });
   }
   await route();
@@ -135,6 +171,7 @@ function showFatal(text) {
 
 async function start() {
   initLang();
+  initPwa();
   // ยังไม่ได้ใส่ค่าใน firebase-config.js → โหมดทดสอบ (localStorage)
   if (!isConfigured()) {
     console.info('firebase-config.js ยังว่าง: ใช้โหมดทดสอบ (localStorage)');

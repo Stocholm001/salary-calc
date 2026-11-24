@@ -1,15 +1,22 @@
 // store/local.js — เก็บข้อมูลใน localStorage (ใช้ช่วงพัฒนา Phase 2)
 //
 // Interface เดียวกับ store/firestore.js (ทุกเมธอดเป็น async):
-//   getProfile()                 → { displayName, username }
+//   getProfile()                 → { displayName, username, photo, firstName, lastName, birthDate }
+//                                  photo = data URL | null, birthDate = "YYYY-MM-DD" | null
+//   saveProfile({ firstName, lastName, birthDate, displayName })
+//   saveProfilePhoto(dataUrl)    ← null = ลบรูป
 //   getSettings()                → { hideOnOpen, weekStartsMonday }
 //   saveSettings(settings)
-//   getMonth(key)                → { salarySatang, items, updatedAt } | null
-//   saveMonth(key, { salarySatang, items })
+//   getMonth(key)                → { salarySatang, items, updatedAt } | null  (ผ่าน sanitizeMonthDoc แล้ว)
+//   saveMonth(key, { salarySatang, items }) → { queued: boolean } | undefined
+//                                  queued = true: บันทึกในเครื่องแล้วแต่ยังส่งขึ้นเซิร์ฟเวอร์ไม่สำเร็จ (ออฟไลน์)
+//   invalidate()                 ← (ไม่บังคับ) ล้าง cache ให้อ่านใหม่ เรียกตอนเปลี่ยนหน้า
 //   listMonthKeys()              → ["YYYY-MM", ...] เรียงจากเก่าไปใหม่
 //   listTemplates()              → [{ id, ...item, startMonth, endMonth }]
 //   saveTemplate(tpl)
 //   deleteTemplate(id)
+
+import { sanitizeMonthDoc, sanitizeTemplate } from '../sanitize.js';
 
 export const DEFAULT_SETTINGS = Object.freeze({ hideOnOpen: false, weekStartsMonday: true });
 
@@ -42,7 +49,24 @@ export function createLocalStore(storage = globalThis.localStorage, ns = 'salary
     kind: 'local',
 
     async getProfile() {
-      return { displayName: 'ผู้ใช้ในเครื่องนี้', username: 'local' };
+      const p = read(k('profile'), {});
+      return {
+        displayName: p.displayName ?? 'ผู้ใช้ในเครื่องนี้',
+        username: 'local',
+        photo: read(k('photo')),
+        firstName: p.firstName ?? '',
+        lastName: p.lastName ?? '',
+        birthDate: p.birthDate ?? null,
+      };
+    },
+
+    async saveProfile({ firstName, lastName, birthDate, displayName }) {
+      write(k('profile'), { firstName, lastName, birthDate: birthDate ?? null, displayName });
+    },
+
+    async saveProfilePhoto(dataUrl) {
+      if (dataUrl) write(k('photo'), dataUrl);
+      else storage.removeItem(k('photo'));
     },
 
     async getSettings() {
@@ -54,7 +78,7 @@ export function createLocalStore(storage = globalThis.localStorage, ns = 'salary
     },
 
     async getMonth(key) {
-      return clone(read(k('months', key)));
+      return sanitizeMonthDoc(read(k('months', key)));
     },
 
     async saveMonth(key, { salarySatang, items }) {
@@ -69,7 +93,7 @@ export function createLocalStore(storage = globalThis.localStorage, ns = 'salary
     async listTemplates() {
       const prefix = k('templates', '');
       return keysWithPrefix(prefix)
-        .map((key) => read(key))
+        .map((key) => sanitizeTemplate(read(key)))
         .filter(Boolean)
         .sort((a, b) => (a.startMonth + a.id).localeCompare(b.startMonth + b.id));
     },

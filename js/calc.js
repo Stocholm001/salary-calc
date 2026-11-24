@@ -24,6 +24,17 @@ export function roundDiv(numer, denom) {
   return Number(neg ? -q : q);
 }
 
+/**
+ * ค่าเงิน/bp/จำนวนวันจากข้อมูลที่อ่านมา ให้เป็น integer ≥ 0 ที่ปลอดภัยเสมอ
+ * รับ number หรือ string ตัวเลข ("900"), ทศนิยมปัดครึ่งขึ้น, ค่าอื่น (NaN, ติดลบ, null, "abc") → fallback
+ */
+export function toSafeInt(v, fallback = 0) {
+  const n = typeof v === 'string' && v.trim() !== '' ? Number(v) : v;
+  if (typeof n !== 'number' || !Number.isFinite(n) || n < 0) return fallback;
+  const r = Math.round(n);
+  return Number.isSafeInteger(r) ? r : fallback;
+}
+
 /** เงินจาก %: roundHalfUp(base × bp / 10000) */
 export function amountFromBp(baseSatang, bp) {
   return roundDiv(BigInt(baseSatang) * BigInt(bp), BP_SCALE);
@@ -64,35 +75,37 @@ export function normalizeItem(item) {
  * }}
  */
 export function calcItem(item, ctx) {
-  const salary = ctx.salarySatang ?? 0;
+  // ตัวเลขทุกตัวผ่าน toSafeInt ก่อน ข้อมูลเสีย (string, NaN, ทศนิยม) จะไม่ทำให้ได้ NaN หรือ BigInt throw
+  const salary = toSafeInt(ctx.salarySatang);
   let out;
 
   if (item.method === 'daily') {
-    const weekdays = item.weekdays ?? DEFAULT_WEEKDAYS;
+    const weekdays = (Array.isArray(item.weekdays) ? item.weekdays : DEFAULT_WEEKDAYS).map(Number);
     const countedDays = countDays(ctx.year, ctx.month, weekdays);
-    const offDays = Math.max(0, Math.trunc(item.offDays ?? 0));
+    const offDays = toSafeInt(Math.trunc(Number(item.offDays ?? 0)));
     const effectiveDays = Math.max(0, countedDays - offDays);
     out = {
-      amountSatang: (item.rateSatang ?? 0) * effectiveDays,
+      amountSatang: toSafeInt(item.rateSatang) * effectiveDays,
       countedDays,
       offDays,
       effectiveDays,
     };
   } else if (item.method === 'fixed') {
     const base = resolveBase(item);
-    const baseSatang = base === 'gross' ? (ctx.grossSatang ?? salary) : salary;
+    const baseSatang = base === 'gross' ? toSafeInt(ctx.grossSatang, salary) : salary;
     let amount;
     let bp;
     if (item.anchor === 'percent') {
-      bp = item.bp ?? 0;
+      bp = toSafeInt(item.bp);
       amount = amountFromBp(baseSatang, bp);
     } else {
-      amount = item.amountSatang ?? 0;
+      amount = toSafeInt(item.amountSatang);
       bp = bpOf(amount, baseSatang);
     }
+    const cap = toSafeInt(item.capSatang, null);
     let capped = false;
-    if (item.capSatang != null && amount > item.capSatang) {
-      amount = item.capSatang;
+    if (cap != null && amount > cap) {
+      amount = cap;
       capped = true;
     }
     out = { amountSatang: amount, base, baseSatang, bp, capped };
@@ -107,12 +120,15 @@ export function calcItem(item, ctx) {
 /**
  * สลับ "ยึดตาม" ของรายการ fixed แล้วคืน item ใหม่
  * ค่าที่ยึดใหม่มาจากค่าที่ผู้ใช้เห็นอยู่ตอนนี้ เช่น 1,000 บน 30,000 = 3.33% → ยึด % → 999.00
+ * ถ้าฐานเป็น 0 จะคิด % ไม่ได้ → คืน item เดิม (ยังยึดตามบาท) ไม่ให้จำนวนเงินหายไปเป็น 0
+ * ผู้เรียกเช็กได้จาก result.anchor ว่าสลับสำเร็จหรือไม่
  */
 export function switchAnchor(item, toAnchor, ctx) {
   if (item.method !== 'fixed' || item.anchor === toAnchor) return { ...item };
   const r = calcItem(item, ctx);
   if (toAnchor === 'percent') {
-    return { ...item, anchor: 'percent', bp: r.bp ?? item.bp ?? 0 };
+    if (r.bp == null) return { ...item };
+    return { ...item, anchor: 'percent', bp: r.bp };
   }
   if (toAnchor === 'amount') {
     return { ...item, anchor: 'amount', amountSatang: r.amountSatang };
@@ -120,17 +136,20 @@ export function switchAnchor(item, toAnchor, ctx) {
   throw new TypeError(`unknown anchor: ${toAnchor}`);
 }
 
+const KNOWN_METHODS = new Set(['fixed', 'daily']);
+
 /**
  * คำนวณทั้งเดือนตามลำดับข้อ 5.2
+ * รายการที่ kind/method ไม่รู้จักจะไม่ถูกนับ (result เป็น undefined) แทนที่จะ throw ทั้งเดือน
  * @param month { year, month, salarySatang, items }
  */
 export function calcMonth({ year, month, salarySatang, items = [] }) {
-  const salary = salarySatang ?? 0;
+  const salary = toSafeInt(salarySatang);
   const results = new Map();
 
   let income = 0;
   for (const item of items) {
-    if (item.kind !== 'income') continue;
+    if (item.kind !== 'income' || !KNOWN_METHODS.has(item.method)) continue;
     const r = calcItem(item, { year, month, salarySatang: salary, grossSatang: salary });
     results.set(item, r);
     income += r.amountSatang;
@@ -139,7 +158,7 @@ export function calcMonth({ year, month, salarySatang, items = [] }) {
 
   let deduct = 0;
   for (const item of items) {
-    if (item.kind !== 'deduct') continue;
+    if (item.kind !== 'deduct' || !KNOWN_METHODS.has(item.method)) continue;
     const r = calcItem(item, { year, month, salarySatang: salary, grossSatang: gross });
     results.set(item, r);
     deduct += r.amountSatang;

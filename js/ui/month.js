@@ -1,4 +1,5 @@
 // ui/month.js — หน้า "เดือนนี้" (F03)
+// รูปตา (app.hidden) ซ่อนเฉพาะเงินเดือน, ยอดสุทธิ และรายรับรวม ยอดของแต่ละรายการแสดงตามปกติ
 
 import { calcMonth, normalizeItem } from '../calc.js';
 import {
@@ -13,8 +14,10 @@ import {
   loadMonth, findPrevSaved, copyFromPrevious, enableRecurring, updateRecurring,
   stopRecurring, getTemplate, firstDataYear, newId,
 } from '../months.js';
-import { html, mount, $, debounce, choose, toast } from './dom.js';
+import { html, mount, $, debounce, choose, toast, bindMoneyInputs } from './dom.js';
 import { icons, pig } from './icons.js';
+import { avatarInner } from './avatar.js';
+import { greetName } from '../profile.js';
 import { openItemSheet, TEMPLATE_KEYS } from './item-sheet.js';
 
 let lastTab = 'deduct';
@@ -30,28 +33,30 @@ export async function renderMonth(root, app, key) {
 
   // ---------- บันทึก ----------
   const saveNow = async () => {
+    let res;
     try {
-      await store.saveMonth(key, { salarySatang: m.salarySatang, items: m.items });
+      res = await store.saveMonth(key, { salarySatang: m.salarySatang, items: m.items });
     } catch (err) {
       console.error(err);
       showStatus(t('month.saveFailed'));
       return;
     }
     m.saved = true;
-    showStatus(t('month.saved'));
+    // queued = ออฟไลน์: บันทึกในเครื่องแล้ว Firestore จะส่งขึ้นเองเมื่อออนไลน์
+    showStatus(t(res?.queued ? 'month.savedOffline' : 'month.saved'), { autoHide: true });
     refreshCard();
   };
   const scheduleSave = debounce(saveNow, 600);
   const touch = () => { showStatus(t('month.saving')); scheduleSave(); };
 
   let statusTimer = null;
-  function showStatus(text) {
+  function showStatus(text, { autoHide = false } = {}) {
     const el = $('#save-status', root);
     if (!el) return;
     el.textContent = text;
     el.classList.add('is-visible');
     clearTimeout(statusTimer);
-    if (text === t('month.saved')) statusTimer = setTimeout(() => el.classList.remove('is-visible'), 1800);
+    if (autoHide) statusTimer = setTimeout(() => el.classList.remove('is-visible'), 1800);
   }
 
   const money = (satang, opts) => maskMoney(formatMoney(satang, opts), app.hidden);
@@ -59,7 +64,10 @@ export async function renderMonth(root, app, key) {
   // ---------- โครงหน้า ----------
   mount(root, html`
     <header class="topbar">
-      <h1 class="topbar__title">${t('app.name')}</h1>
+      <a class="hello" href="#/settings" title="${t('prof.toSettings')}">
+        <span class="hello__avatar" aria-hidden="true">${avatarInner(app.profile)}</span>
+        <h1 class="hello__text">${t('prof.hello', { name: greetName(app.profile) })}</h1>
+      </a>
       <button type="button" class="icon-btn" id="eye"></button>
     </header>
 
@@ -98,6 +106,7 @@ export async function renderMonth(root, app, key) {
   `);
 
   const salaryEl = $('#salary', root);
+  bindMoneyInputs(root, '#salary');
 
   // ---------- ส่วนที่วาดใหม่ได้ ----------
   function refreshEye() {
@@ -133,7 +142,7 @@ export async function renderMonth(root, app, key) {
             <p class="pig-card__eyebrow">${neg ? t('month.negLabel') : t('month.netLabel')} · ${monthLabel(year, month)}
               ${m.saved ? '' : html`<span class="chip chip--draft">${t('month.draft')}</span>`}</p>
             <p class="pig-card__net">${net}</p>
-            <p class="pig-card__sub">${t('month.grossDeduct', { gross: money(r.grossSatang), deduct: money(r.deductSatang) })}</p>
+            <p class="pig-card__sub">${t('month.grossDeduct', { gross: money(r.grossSatang), deduct: formatMoney(r.deductSatang) })}</p>
           </div>
         </div>
         <div class="bar" aria-hidden="true"><span class="bar__fill" style="width:${barPct}%"></span></div>
@@ -161,7 +170,7 @@ export async function renderMonth(root, app, key) {
     const tabBtn = (kind, label, amount, sign) => html`
       <button type="button" role="tab" class="tabs__btn" data-tab="${kind}"
               aria-selected="${tab === kind}" id="tab-${kind}">
-        ${label} ${app.hidden ? HIDDEN : `${sign}${formatMoney(amount, { sign: 'none' })}`}
+        ${label} ${sign}${formatMoney(amount, { sign: 'none' })}
       </button>`;
     mount($('#tabs', root), html`
       ${tabBtn('income', t('kind.income'), r.incomeSatang, '+')}
@@ -172,23 +181,33 @@ export async function renderMonth(root, app, key) {
     mount($('#list', root), rows.length ? html`
       <ul class="items">
         ${rows.map(({ item, result }) => html`
-          <li>
+          <li class="item">
             <button type="button" class="item-card" data-id="${item.id}">
               <span class="item-card__main">
                 <span class="item-card__name">${item.name}</span>
                 <span class="item-card__chips">
-                  <span class="chip chip--${item.method === 'daily' ? 'daily' : item.anchor === 'percent' ? 'pct' : 'fixed'}">${methodBadge(item)}</span>
-                  ${item.templateId ? html`<span class="chip chip--recur">${t('badge.recur')}</span>` : ''}
+                  ${item.method === 'daily' || item.anchor === 'percent'
+                    ? html`<span class="chip chip--${item.method === 'daily' ? 'daily' : 'pct'}">${methodBadge(item)}</span>` : ''}
+                  ${item.templateId
+                    ? html`<span class="chip chip--recur">${t('badge.recur')}</span>`
+                    : html`<span class="chip chip--once">${t('badge.once')}</span>`}
                 </span>
-                <span class="item-card__desc">${app.hidden ? describeHidden(item, result) : describeItem(item, result)}</span>
+                <span class="item-card__desc">${describeItem(item, result)}</span>
               </span>
               <span class="item-card__side">
-                <span class="item-card__amt item-card__amt--${item.kind}">
-                  ${app.hidden ? HIDDEN : formatMoney(item.kind === 'income' ? result.amountSatang : -result.amountSatang, { sign: 'always' })}
+                <span class="item-card__amt item-card__amt--${item.kind === 'deduct' && item.paid ? 'paid' : item.kind}">
+                  ${formatMoney(item.kind === 'income' ? result.amountSatang : -result.amountSatang, { sign: 'always' })}
                 </span>
                 <span class="item-card__pct">${pctOfSalaryText(result.pctOfSalaryBp)}</span>
               </span>
             </button>
+            ${item.kind === 'deduct' ? html`
+              <div class="item__foot">
+                <button type="button" class="paid-btn ${item.paid ? 'is-paid' : ''}" data-paid="${item.id}"
+                        aria-pressed="${String(!!item.paid)}" aria-label="${t('paid.label', { name: item.name })}: ${t(item.paid ? 'paid.yes' : 'paid.no')}">
+                  ${item.paid ? icons.check() : icons.circle()}<span>${t(item.paid ? 'paid.yes' : 'paid.no')}</span>
+                </button>
+              </div>` : ''}
           </li>`)}
       </ul>` : html`<p class="empty">${t(tab === 'income' ? 'month.emptyIncome' : 'month.emptyDeduct')}</p>`);
 
@@ -273,6 +292,19 @@ export async function renderMonth(root, app, key) {
 
   $('#add', root).addEventListener('click', () => openSheet(null));
   $('#list', root).addEventListener('click', (e) => {
+    const p = e.target.closest('[data-paid]');
+    if (p) {
+      const item = m.items.find((it) => it.id === p.dataset.paid);
+      if (!item) return;
+      const idx = m.items.indexOf(item);
+      const next = { ...item };
+      if (item.paid) delete next.paid; else next.paid = true;
+      m.items[idx] = next;
+      refreshListAndTabs();
+      $(`[data-paid="${next.id}"]`, root)?.focus();
+      touch();
+      return;
+    }
     const b = e.target.closest('[data-id]');
     if (!b) return;
     const item = m.items.find((it) => it.id === b.dataset.id);
@@ -296,28 +328,34 @@ export async function renderMonth(root, app, key) {
     });
     if (!res) return;
 
+    let changed;
     try {
       await scheduleSave.flush();
-      if (res.action === 'delete') await handleDelete(orig);
-      else await handleSave(orig, res.item, res.recurring, tpl);
+      changed = res.action === 'delete'
+        ? await handleDelete(orig)
+        : await handleSave(orig, res.item, res.recurring, tpl);
     } catch (err) {
       console.error(err);
       toast(t('save.failed'));
       return;
     }
+    // ผู้ใช้กดยกเลิกในกล่องถาม → ไม่มีอะไรเปลี่ยน ไม่บันทึก (เดือนร่างจะได้ไม่ถูกสร้างเป็นเอกสาร)
+    if (!changed) return;
     prev = await findPrevSaved(store, key);
     if (res.action !== 'delete' && res.item.kind !== tab) { tab = lastTab = res.item.kind; }
     refreshAll();
     await saveNow();
   }
 
+  /** @returns true ถ้ามีการเปลี่ยน, false ถ้าผู้ใช้ยกเลิกกลางทาง */
   async function handleSave(orig, edited, recurring, tpl) {
     let item = normalizeItem({ ...edited, id: orig?.id ?? newId('itm'), templateId: orig?.templateId ?? null });
+    if (orig?.paid && item.kind === 'deduct') item.paid = true;
 
     if (!orig) {
       if (recurring.on) item = await enableRecurring(store, key, item, recurring.endMonth);
       m.items.push(item);
-      return;
+      return true;
     }
 
     const idx = m.items.indexOf(orig);
@@ -328,7 +366,7 @@ export async function renderMonth(root, app, key) {
           message: t('recurOff.msg'),
           options: [{ label: t('recurOff.title'), value: 'stop', tone: 'primary' }],
         });
-        if (!ok) return;
+        if (!ok) return false;
         await stopRecurring(store, orig.templateId, key);
         item = { ...item, templateId: null };
       } else {
@@ -343,7 +381,7 @@ export async function renderMonth(root, app, key) {
               { label: t('recurEdit.future'), value: 'future', tone: 'primary' },
             ],
           });
-          if (!scope) return;
+          if (!scope) return false;
           if (scope === 'future') item = await updateRecurring(store, key, item, recurring.endMonth);
         }
       }
@@ -351,8 +389,10 @@ export async function renderMonth(root, app, key) {
       item = await enableRecurring(store, key, item, recurring.endMonth);
     }
     m.items[idx] = item;
+    return true;
   }
 
+  /** @returns true ถ้าลบแล้ว, false ถ้าผู้ใช้ยกเลิก */
   async function handleDelete(orig) {
     if (orig.templateId) {
       const scope = await choose({
@@ -363,19 +403,13 @@ export async function renderMonth(root, app, key) {
           { label: t('del.stop'), value: 'stop', tone: 'danger' },
         ],
       });
-      if (!scope) return;
+      if (!scope) return false;
       if (scope === 'stop') await stopRecurring(store, orig.templateId, addMonths(key, -1));
     }
     m.items = m.items.filter((it) => it !== orig);
+    return true;
   }
 
   // ---------- cleanup ----------
   return async () => { await scheduleSave.flush(); };
-}
-
-/** บรรทัดอธิบายตอนซ่อนตัวเลข (ไม่โชว์ยอดเงิน แต่ % และจำนวนวันยังแสดงได้) */
-function describeHidden(item, result) {
-  if (item.method === 'daily') return t('fmt.hiddenDaily', { h: HIDDEN, n: result.effectiveDays });
-  if (item.anchor !== 'percent') return t('fmt.fixed');
-  return describeItem(item, { ...result, capped: false });
 }

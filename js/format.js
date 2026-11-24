@@ -62,25 +62,34 @@ export function maskMoney(text, hidden) {
 
 // ---------- แปลงค่าที่ผู้ใช้กรอก ----------
 
-// ตัวเลขไม่ติดลบ ทศนิยมไม่เกิน 2 ตำแหน่ง อนุญาต comma คั่นหลักและช่องว่าง
-const DECIMAL_RE = /^(\d+)(?:\.(\d{0,2}))?$/;
+// ตัวเลขไม่ติดลบ ทศนิยมไม่เกิน 2 ตำแหน่ง
+const PLAIN_RE = /^(\d+)(?:\.(\d{0,2}))?$/;
+// comma คั่นหลักต้องอยู่ตำแหน่งที่ถูกต้องเท่านั้น: 1,000 / 12,345.50 (ไม่รับ 1,5 หรือ 1,,0)
+const GROUPED_RE = /^(\d{1,3}(?:,\d{3})+)(?:\.(\d{0,2}))?$/;
 
-function parseFixed2(str) {
+/**
+ * @param allowGrouping รับ comma คั่นหลักหรือไม่ (ช่อง % ไม่รับ เพราะ "1,5" อาจหมายถึง 1.5)
+ * ตัดช่องว่างหัวท้ายเท่านั้น ช่องว่างกลางตัวเลขถือว่าไม่ถูกต้อง
+ */
+function parseFixed2(str, allowGrouping) {
   if (typeof str === 'number') str = String(str);
   if (typeof str !== 'string') return null;
-  const s = str.replace(/[,\s]/g, '');
+  let s = str.trim();
   if (s === '' || s === '.') return null;
-  const m = DECIMAL_RE.exec(s.startsWith('.') ? '0' + s : s);
+  if (s.startsWith('.')) s = '0' + s;
+  let m = PLAIN_RE.exec(s);
+  if (!m && allowGrouping) m = GROUPED_RE.exec(s);
   if (!m) return null;
-  const value = Number(m[1]) * 100 + Number((m[2] ?? '').padEnd(2, '0'));
+  const int = m[1].replace(/,/g, '');
+  const value = Number(int) * 100 + Number((m[2] ?? '').padEnd(2, '0'));
   return Number.isSafeInteger(value) ? value : null;
 }
 
-/** "1,000.5" → 100050 (สตางค์), ไม่ถูกต้อง/ทศนิยมเกิน 2 ตำแหน่ง → null */
-export const parseMoney = parseFixed2;
+/** "1,000.5" → 100050 (สตางค์), ไม่ถูกต้อง/comma ผิดตำแหน่ง/ทศนิยมเกิน 2 ตำแหน่ง → null */
+export const parseMoney = (str) => parseFixed2(str, true);
 
-/** "3.25" → 325 (bp), ไม่ถูกต้อง/ทศนิยมเกิน 2 ตำแหน่ง → null */
-export const parsePercent = parseFixed2;
+/** "3.25" → 325 (bp), ไม่ถูกต้อง/มี comma/ทศนิยมเกิน 2 ตำแหน่ง → null */
+export const parsePercent = (str) => parseFixed2(str, false);
 
 // ---------- ข้อความอธิบายรายการ (ตามภาษาปัจจุบัน) ----------
 
@@ -136,4 +145,43 @@ export function pctOfSalaryText(bp) {
 /** ข้อความเตือนตอนยอดสุทธิติดลบ */
 export function negativeNetMessage(netSatang) {
   return t('fmt.negative', { amount: formatMoney(Math.abs(netSatang)) });
+}
+
+// ---------- ใส่ comma ระหว่างพิมพ์ ----------
+
+/**
+ * จัดข้อความในช่องเงินขณะพิมพ์: "12345.6" → "12,345.6"
+ * เก็บเฉพาะตัวเลขกับจุดทศนิยมตัวแรก แล้วบอกตำแหน่งเคอร์เซอร์ใหม่
+ * (นับจำนวนตัวเลข/จุดที่อยู่หน้าเคอร์เซอร์เดิม แล้ววางหลังตัวที่ตรงกันในข้อความใหม่)
+ * @returns {{ value: string, caret: number }}
+ */
+export function formatMoneyTyping(raw, caret = raw.length) {
+  let seenDot = false;
+  let kept = '';
+  let keptBeforeCaret = 0;
+  for (let i = 0; i < raw.length; i++) {
+    const c = raw[i];
+    const ok = (c >= '0' && c <= '9') || (c === '.' && !seenDot);
+    if (!ok) continue;
+    if (c === '.') seenDot = true;
+    kept += c;
+    if (i < caret) keptBeforeCaret++;
+  }
+  const dot = kept.indexOf('.');
+  let int = dot === -1 ? kept : kept.slice(0, dot);
+  const frac = dot === -1 ? '' : kept.slice(dot);
+  // ตัด 0 นำหน้า ("007" → "7") แต่เหลือ "0" ไว้ก่อนจุด
+  const lead = int.length - (int.replace(/^0+(?=\d)/, '')).length;
+  int = int.slice(lead);
+  keptBeforeCaret = Math.max(0, keptBeforeCaret - lead);
+  const grouped = int.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  const value = grouped + frac;
+
+  let n = 0;
+  let pos = 0;
+  while (pos < value.length && n < keptBeforeCaret) {
+    if (value[pos] !== ',') n++;
+    pos++;
+  }
+  return { value, caret: pos };
 }
