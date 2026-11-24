@@ -91,6 +91,16 @@ export const parseMoney = (str) => parseFixed2(str, true);
 /** "3.25" → 325 (bp), ไม่ถูกต้อง/มี comma/ทศนิยมเกิน 2 ตำแหน่ง → null */
 export const parsePercent = (str) => parseFixed2(str, false);
 
+/**
+ * ช่องเงินเดือน: ช่องว่าง = 0 (ลบหมดแล้วยอดด้านบนต้องลดตาม), ค่าผิดรูปแบบ → error
+ * @returns {{ satang: number|null, error: string|null }} error เป็นคีย์คำแปล
+ */
+export function parseSalaryInput(text) {
+  if (String(text ?? '').trim() === '') return { satang: 0, error: null };
+  const satang = parseMoney(text);
+  return satang == null ? { satang: null, error: 'err.number' } : { satang, error: null };
+}
+
 // ---------- ข้อความอธิบายรายการ (ตามภาษาปัจจุบัน) ----------
 
 const baseLabel = (base) => t(base === 'gross' ? 'fmt.ofGross' : 'fmt.ofSalary');

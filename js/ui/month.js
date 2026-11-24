@@ -7,7 +7,7 @@ import {
 } from '../dates.js';
 import { t } from '../i18n.js';
 import {
-  formatMoney, formatPct, maskMoney, parseMoney, describeItem, methodBadge,
+  formatMoney, formatPct, maskMoney, parseSalaryInput, describeItem, methodBadge,
   pctOfSalaryText, negativeNetMessage, HIDDEN,
 } from '../format.js';
 import {
@@ -237,22 +237,26 @@ export async function renderMonth(root, app, key) {
   $('#sel-month', root).addEventListener('change', go);
   $('#sel-year', root).addEventListener('change', go);
 
+  const setSalaryError = (msg) => {
+    $('#salary-err', root).textContent = msg;
+    if (msg) salaryEl.setAttribute('aria-invalid', 'true'); else salaryEl.removeAttribute('aria-invalid');
+  };
   salaryEl.addEventListener('input', () => {
     if (app.hidden) return;
-    const v = parseMoney(salaryEl.value);
-    const err = $('#salary-err', root);
-    if (v == null) {
-      err.textContent = salaryEl.value.trim() === '' ? t('month.salaryRequired') : t('err.number');
-      salaryEl.setAttribute('aria-invalid', 'true');
-      return;
-    }
-    err.textContent = '';
-    salaryEl.removeAttribute('aria-invalid');
-    m.salarySatang = v;
+    // ช่องว่าง = เงินเดือน 0 → ยอดด้านบนคำนวณใหม่ทันที, ค่าผิดรูปแบบ → แจ้ง error และยังไม่เปลี่ยนค่า
+    const { satang, error } = parseSalaryInput(salaryEl.value);
+    if (error) { setSalaryError(t(error)); return; }
+    setSalaryError('');
+    if (satang === m.salarySatang) return;
+    m.salarySatang = satang;
     refreshListAndTabs();
     touch();
   });
-  salaryEl.addEventListener('blur', refreshSalary);
+  // ออกจากช่อง: แสดงค่าที่ใช้จริง (ค่าผิดรูปแบบจะกลับเป็นค่าล่าสุดที่ใช้ได้) และล้าง error ที่ค้าง
+  salaryEl.addEventListener('blur', () => {
+    if (!app.hidden) setSalaryError('');
+    refreshSalary();
+  });
 
   $('#tabs', root).addEventListener('click', (e) => {
     const b = e.target.closest('[data-tab]');

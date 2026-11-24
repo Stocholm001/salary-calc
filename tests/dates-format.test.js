@@ -8,7 +8,7 @@ import {
 } from '../js/dates.js';
 import {
   formatMoney, formatMoneyCompact, formatPct, formatPctCompact, maskMoney, HIDDEN,
-  parseMoney, parsePercent, dailySummaryLines, negativeNetMessage, methodBadge,
+  parseMoney, parsePercent, parseSalaryInput, dailySummaryLines, negativeNetMessage, methodBadge,
 } from '../js/format.js';
 import { calcItem } from '../js/calc.js';
 
@@ -155,4 +155,13 @@ test('yearOptions: ปีแรกที่มีข้อมูลอยู่�
   assert.equal(ys[0], 2026);
   assert.equal(ys.at(-1), 2036);
   assert.equal(ys.length, 11);
+});
+
+test('parseSalaryInput: ลบจนว่าง = 0 (ยอดด้านบนต้องลดตาม), ค่าผิดรูปแบบ = error ไม่เปลี่ยนค่า', () => {
+  assert.deepEqual(parseSalaryInput(''), { satang: 0, error: null });
+  assert.deepEqual(parseSalaryInput('   '), { satang: 0, error: null });
+  assert.deepEqual(parseSalaryInput('1'), { satang: 100, error: null });
+  assert.deepEqual(parseSalaryInput('30,000.50'), { satang: 3000050, error: null });
+  assert.deepEqual(parseSalaryInput('1,5'), { satang: null, error: 'err.number' });
+  assert.deepEqual(parseSalaryInput('abc'), { satang: null, error: 'err.number' });
 });
