@@ -218,6 +218,7 @@ const DICT = {
     'set.logoutTitle': 'ออกจากระบบ?',
     'set.logoutMsg': 'ครั้งหน้าต้องกรอกชื่อและ PIN อีกครั้ง',
     'set.forgot': 'ลืม PIN ต้องรีเซ็ตใน Firebase console',
+    'set.version': 'เวอร์ชัน {v}',
     'set.saveFailed': 'บันทึกไม่สำเร็จ ตรวจอินเทอร์เน็ต',
 
     'cp.old': 'กรอก PIN เดิม',
@@ -482,6 +483,7 @@ const DICT = {
     'set.logoutTitle': 'Sign out?',
     'set.logoutMsg': "You'll need your name and PIN to sign in again",
     'set.forgot': 'Forgot your PIN? It has to be reset in the Firebase console',
+    'set.version': 'Version {v}',
     'set.saveFailed': "Couldn't save. Check your connection",
 
     'cp.old': 'Enter your current PIN',

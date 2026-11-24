@@ -205,6 +205,7 @@ ul { list-style: none; margin: 0; padding: 0; }
 
 .empty { text-align: center; color: var(--muted); padding: 16px 0; }
 .hint { font-size: .85rem; color: var(--muted); text-align: center; }
+.app-version { font-size: .75rem; color: var(--muted); text-align: center; font-variant-numeric: tabular-nums; }
 
 .save-status {
   position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(var(--tabbar-h) + 12px + env(safe-area-inset-bottom));

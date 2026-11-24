@@ -12,6 +12,7 @@ import { fullName, formatBirthDate, validateProfile, todayIso } from '../profile
 import { openImage, IMAGE_ACCEPT, DecoderLoadError } from './image-load.js';
 import { backupCsv, backupFilename } from '../csv.js';
 import { installState, promptInstall, onInstallChange } from '../pwa.js';
+import { appVersion } from '../version.js';
 
 export async function renderSettings(root, app) {
   const online = app.store.kind === 'firestore';
@@ -71,6 +72,7 @@ export async function renderSettings(root, app) {
     </section>
 
     <p class="hint">${t('set.forgot')}</p>
+    <p class="app-version">${t('set.version', { v: appVersion() })}</p>
   `);
 
   bindLangToggle($('#lang-slot', root), () => app.rerender());

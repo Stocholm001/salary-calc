@@ -30,6 +30,7 @@ const SHELL = [
   './js/sanitize.js',
   './js/lockout.js',
   './js/username.js',
+  './js/version.js',
   './js/store/firestore.js',
   './js/store/local.js',
   './js/ui/avatar.js',
