@@ -26,8 +26,8 @@
 }
 
 * { box-sizing: border-box; }
-/* touch-action: ปิด double-tap zoom (แตะปุ่มรัว ๆ แล้วไม่ซูม) แต่ยังใช้สองนิ้วซูมได้ */
-html { -webkit-text-size-adjust: 100%; touch-action: manipulation; }
+/* touch-action: pan-x pan-y = เลื่อนได้อย่างเดียว ไม่ซูมทั้งแตะสองครั้งและสองนิ้ว (ดู index.html ด้วย) */
+html { -webkit-text-size-adjust: 100%; touch-action: pan-x pan-y; }
 button, a, input, select, label, [role="button"] { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
 body {
   margin: 0;
