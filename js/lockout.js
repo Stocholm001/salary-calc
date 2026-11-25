@@ -1,10 +1,10 @@
-// lockout.js — ใส่ PIN ผิดครบ 3 ครั้ง ล็อกการกรอก PIN ของชื่อนั้น 5 นาที (นับแยกตามเครื่อง)
+// lockout.js — ใส่ PIN ผิดครบ 3 ครั้ง ล็อกการกรอก PIN ของชื่อนั้น 1 นาที (นับแยกตามเครื่อง)
 //
 // เก็บใน localStorage ของเครื่องนี้ จึงกันการเดา PIN บนเครื่องนี้ได้
 // ส่วนการกันจากเครื่องอื่น Firebase Auth จำกัดจำนวนครั้งฝั่งเซิร์ฟเวอร์ให้อยู่แล้ว (auth/too-many-requests)
 
 export const MAX_TRIES = 3;
-export const LOCK_MS = 5 * 60 * 1000;
+export const LOCK_MS = 60 * 1000;
 const KEY = 'salary-calc:pin-fails';
 
 function readAll(storage) {
