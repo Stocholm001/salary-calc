@@ -1,0 +1,183 @@
+/* themes.css — ธีมสีทางเลือก (รหัสสีจาก design/THEMES.md)
+   ชุด 00 เหลืองกระปุกอยู่ใน :root ของ style.css; ชุดอื่นสลับด้วย <html data-theme="slug"> */
+
+/* 01 มินต์สดชื่น */
+[data-theme="mint"] {
+  --bg: #EEF8F3;
+  --card: #FFFFFF;
+  --ink: #173B30;
+  --muted: #3E5F55;
+  --line: #CDE7DA;
+  --card-hi: #CBEEDD;
+  --accent: #17785A;
+  --on-accent: #FFFFFF;
+  --paid: #1D5C9E;
+  --bar: #7CCCA9;
+  --warn-bg: #FFE0D6;
+  --warn-ink: #8A1F00;
+  --paid-bg: #DCE9F7;
+  --zebra: #F7FCF9;
+}
+
+/* 02 ฟ้าทะเล */
+[data-theme="ocean"] {
+  --bg: #EEF5FC;
+  --card: #FFFFFF;
+  --ink: #12304D;
+  --muted: #3D5773;
+  --line: #D3E3F3;
+  --card-hi: #D4E7FA;
+  --accent: #1F5FA8;
+  --on-accent: #FFFFFF;
+  --paid: #2F6B45;
+  --bar: #7FB2E5;
+  --warn-bg: #FFE0D6;
+  --warn-ink: #8A1F00;
+  --paid-bg: #DCEBD9;
+  --zebra: #F8FBFE;
+}
+
+/* 03 พีชแซลมอน */
+[data-theme="peach"] {
+  --bg: #FFF3EC;
+  --card: #FFFFFF;
+  --ink: #4A2414;
+  --muted: #74452E;
+  --line: #F8D9C8;
+  --card-hi: #FFDCC8;
+  --accent: #B93C0C;
+  --on-accent: #FFFFFF;
+  --paid: #2F6B45;
+  --bar: #F2A27C;
+  --warn-bg: #FFE3E3;
+  --warn-ink: #8A1F1F;
+  --paid-bg: #DCEBD9;
+  --zebra: #FFFAF6;
+}
+
+/* 04 ชมพูซากุระ */
+[data-theme="sakura"] {
+  --bg: #FFF2F5;
+  --card: #FFFFFF;
+  --ink: #4A1D2B;
+  --muted: #744458;
+  --line: #F6D5DF;
+  --card-hi: #FFD9E4;
+  --accent: #B12E5B;
+  --on-accent: #FFFFFF;
+  --paid: #2F6B45;
+  --bar: #EE8DAE;
+  --warn-bg: #FFE3D6;
+  --warn-ink: #8A2A00;
+  --paid-bg: #DCEBD9;
+  --zebra: #FFF9FB;
+}
+
+/* 05 ลาเต้กาแฟ */
+[data-theme="latte"] {
+  --bg: #F7F1E8;
+  --card: #FFFFFF;
+  --ink: #3B2A1E;
+  --muted: #685243;
+  --line: #E6D8C3;
+  --card-hi: #EBDBC3;
+  --accent: #87472A;
+  --on-accent: #FFFFFF;
+  --paid: #3B6A46;
+  --bar: #C9A27E;
+  --warn-bg: #FBE0D6;
+  --warn-ink: #8A1F00;
+  --paid-bg: #DFEADB;
+  --zebra: #FCF9F4;
+}
+
+/* 06 เขียวมัทฉะ */
+[data-theme="matcha"] {
+  --bg: #F3F6EA;
+  --card: #FFFFFF;
+  --ink: #283316;
+  --muted: #535F3A;
+  --line: #DDE5C6;
+  --card-hi: #DCE8B8;
+  --accent: #4B6A1D;
+  --on-accent: #FFFFFF;
+  --paid: #1D5C9E;
+  --bar: #A6BE6A;
+  --warn-bg: #FBE2D6;
+  --warn-ink: #8A1F00;
+  --paid-bg: #DCE9F7;
+  --zebra: #FAFBF5;
+}
+
+/* 07 กรมท่าทอง */
+[data-theme="navy-gold"] {
+  --bg: #F5F3EE;
+  --card: #FFFFFF;
+  --ink: #1B2540;
+  --muted: #4A546E;
+  --line: #E2DED2;
+  --card-hi: #F3E2B3;
+  --accent: #1E2F5C;
+  --on-accent: #FFFFFF;
+  --paid: #2F6B45;
+  --bar: #D4A93C;
+  --warn-bg: #FBE0D6;
+  --warn-ink: #8A1F00;
+  --paid-bg: #DCEBD9;
+  --zebra: #FBFAF7;
+}
+
+/* 08 เทอร์ควอยซ์ปะการัง */
+[data-theme="teal-coral"] {
+  --bg: #EFF8F8;
+  --card: #FFFFFF;
+  --ink: #12393B;
+  --muted: #3D6264;
+  --line: #CDE6E5;
+  --card-hi: #CBEDEA;
+  --accent: #BF3F2A;
+  --on-accent: #FFFFFF;
+  --paid: #0F6E66;
+  --bar: #6CC4BE;
+  --warn-bg: #FFE2DA;
+  --warn-ink: #8A1F00;
+  --paid-bg: #D3EEEB;
+  --zebra: #F7FCFC;
+}
+
+/* 09 กราไฟต์มินิมอล */
+[data-theme="graphite"] {
+  --bg: #F5F5F2;
+  --card: #FFFFFF;
+  --ink: #1E1E1E;
+  --muted: #545454;
+  --line: #E3E3DE;
+  --card-hi: #EAEAE4;
+  --accent: #222222;
+  --on-accent: #FFFFFF;
+  --paid: #2F6B45;
+  --bar: #A3A39C;
+  --warn-bg: #FBE0D6;
+  --warn-ink: #8A1F00;
+  --paid-bg: #DCEBD9;
+  --zebra: #FAFAF8;
+}
+
+/* 10 กลางคืน (มืด) */
+[data-theme="midnight"] {
+  --bg: #12161F;
+  --card: #1C2230;
+  --ink: #EEF1F7;
+  --muted: #A9B2C5;
+  --line: #2D3548;
+  --card-hi: #28324C;
+  --accent: #F5B84C;
+  --on-accent: #14181F;
+  --paid: #62CC92;
+  --bar: #6C8AD8;
+  --warn-bg: #4A2A22;
+  --warn-ink: #FFB4A0;
+  --paid-bg: #1E3A2C;
+  --zebra: #20273A;
+  color-scheme: dark;
+}

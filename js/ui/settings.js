@@ -13,6 +13,8 @@ import { openImage, IMAGE_ACCEPT, DecoderLoadError } from './image-load.js';
 import { backupCsv, backupFilename } from '../csv.js';
 import { installState, promptInstall, onInstallChange } from '../pwa.js';
 import { appVersion } from '../version.js';
+import { getTheme } from '../theme.js';
+import { openThemePicker } from './theme-picker.js';
 
 export async function renderSettings(root, app) {
   const online = app.store.kind === 'firestore';
@@ -60,6 +62,7 @@ export async function renderSettings(root, app) {
         <span class="set-row__text"><span class="set-row__title">${t('lang.label')}</span></span>
         <span id="lang-slot">${langToggle()}</span>
       </div>
+      ${row('theme', t('set.theme'), t(`theme.${getTheme()}`), true)}
       ${sw('hideOnOpen', t('set.hideOnOpen'), t('set.hideOnOpenSub'))}
       ${sw('weekStartsMonday', t('set.weekMonday'), '')}
       ${row('change-pin', t('set.changePin'), online ? t('set.changePinSub') : t('set.needFirebase'), online)}
@@ -76,6 +79,10 @@ export async function renderSettings(root, app) {
   `);
 
   bindLangToggle($('#lang-slot', root), () => app.rerender());
+
+  $('#theme', root).addEventListener('click', async () => {
+    await openThemePicker((id) => { $('#theme-sub', root).textContent = t(`theme.${id}`); });
+  });
 
   $$('[data-setting]', root).forEach((b) => b.addEventListener('click', async () => {
     const key = b.dataset.setting;

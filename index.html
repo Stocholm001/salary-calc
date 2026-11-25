@@ -18,7 +18,19 @@
   </script>
   <title>กระปุกเงินเดือน</title>
   <link rel="manifest" href="manifest.json">
-  <meta name="theme-color" content="#FFE89A">
+  <meta name="theme-color" content="#FFF8DC">
+  <script>
+    // ใส่ธีมสีที่เลือกไว้ก่อนวาดหน้า กันจอกะพริบเป็นสีเหลือง (ค่าเดียวกับ js/theme.js)
+    (function () {
+      var bg = { mint: '#EEF8F3', ocean: '#EEF5FC', peach: '#FFF3EC', sakura: '#FFF2F5', latte: '#F7F1E8', matcha: '#F3F6EA',
+        'navy-gold': '#F5F3EE', 'teal-coral': '#EFF8F8', graphite: '#F5F5F2', midnight: '#12161F' };
+      var id = null;
+      try { id = localStorage.getItem('salary-calc:theme'); } catch (e) { /* ignore */ }
+      if (!id || !bg.hasOwnProperty(id)) return;
+      document.documentElement.setAttribute('data-theme', id);
+      document.querySelector('meta[name="theme-color"]').setAttribute('content', bg[id]);
+    })();
+  </script>
   <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -29,6 +41,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Mitr:wght@300;400;500;600&display=swap">
   <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/themes.css">
 </head>
 <body>
   <div id="app"></div>

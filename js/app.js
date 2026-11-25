@@ -11,6 +11,7 @@ import { createFirestoreStore } from './store/firestore.js';
 import { isConfigured, configProblem, initFirebase, currentUser, signOut } from './auth.js';
 import { renderLogin } from './ui/login.js';
 import { initLang, t } from './i18n.js';
+import { initTheme } from './theme.js';
 import { monthKey, parseMonthKey } from './dates.js';
 import { html, mount, $ } from './ui/dom.js';
 import { icons } from './ui/icons.js';
@@ -189,6 +190,7 @@ function showFatal(text) {
 
 async function start() {
   initLang();
+  initTheme();
   initPwa();
   // ยังไม่ได้ใส่ค่าใน firebase-config.js → โหมดทดสอบ (localStorage)
   if (!isConfigured()) {
